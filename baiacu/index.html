@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Baiacu</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;800&family=Figtree:wght@400;600&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="stage">
+  <canvas id="game" aria-label="Jogo Baiacu"></canvas>
+
+  <button id="pauseBtn" hidden aria-label="Pausar">Pausar</button>
+
+  <div id="cam" hidden>
+    <div id="camBox">
+      <video id="video" playsinline muted></video>
+      <canvas id="camOverlay" width="380" height="285"></canvas>
+    </div>
+    <div id="camInfo"><span>Abertura</span><div class="bar"><i id="camBar"></i></div><span id="camPct">0%</span></div>
+  </div>
+
+  <section id="tutorial" hidden aria-live="polite">
+    <div id="tutGesture">
+      <div id="tutStep" class="eyebrow">Passo 1 de 4</div>
+      <h2 id="tutTitle">Mostre a mão para a câmera</h2>
+      <p id="tutHint"></p>
+      <p id="tutWarn" hidden>Não estou vendo a mão. Traga ela de volta para a frente da câmera.</p>
+    </div>
+    <div id="tutFinal" hidden>
+      <div class="eyebrow">Pronto</div>
+      <h2>Antes de mergulhar</h2>
+      <ul>
+        <li>Desvie dos corais. Nas <b>fendas estreitas</b> (rosa) o baiacu inflado não passa.</li>
+        <li>Pegue as pérolas para ganhar pontos.</li>
+        <li>Você tem 3 vidas.</li>
+        <li id="tutPauseTip">Se a mão sair da câmera, o jogo pausa sozinho.</li>
+      </ul>
+    </div>
+    <div class="bar" id="tutBarWrap"><i id="tutBar"></i></div>
+    <div class="tut-foot">
+      <button class="link" id="tutSkip">Pular tutorial</button>
+      <button class="primary" id="tutGo" hidden>Começar</button>
+    </div>
+  </section>
+
+  <section class="screen" id="screenStart">
+    <div class="card">
+      <h1>Baiacu</h1>
+      <p class="lede">Abra a mão na frente da câmera para inflar e subir. Feche para murchar e afundar.</p>
+      <div class="row">
+        <button class="primary" id="btnCam">Jogar com a câmera</button>
+        <button id="btnKeys">Jogar com o teclado</button>
+      </div>
+      <p class="status" id="startStatus" role="status"></p>
+      <p class="fine">O vídeo é analisado só no seu navegador. Nada é gravado nem enviado.</p>
+    </div>
+  </section>
+
+  <section class="screen" id="screenPause" hidden>
+    <div class="card">
+      <h2 id="pauseTitle">Cadê a mão?</h2>
+      <p id="pauseText">Mostre a mão para a câmera para continuar.</p>
+      <div class="row">
+        <button class="primary" id="btnResume">Continuar</button>
+        <button id="btnToKeys">Trocar para o teclado</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="screen" id="screenOver" hidden>
+    <div class="card">
+      <h2>Fim de jogo</h2>
+      <div class="score-line">
+        <div><b id="overScore">0</b><span>Pontos</span></div>
+        <div><b id="overBest">0</b><span>Recorde da sessão</span></div>
+      </div>
+      <div class="row">
+        <button class="primary" id="btnAgain">Jogar de novo</button>
+        <button id="btnTutAgain">Rever tutorial</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script src="game.js"></script>
+</body>
+</html>
