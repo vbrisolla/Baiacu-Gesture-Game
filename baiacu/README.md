@@ -5,7 +5,7 @@
 ### Abra a mão. Infle o peixe. Desvie dos corais.
 
 Um jogo de navegador em que você controla um baiacu **com a sua mão, pela webcam**.<br>
-Sem controle, sem instalar nada: só você, a câmera e um peixe muito estufado.
+Junte pérolas, ganhe moedas e vista seu baiacu de cartola, coroa ou cachecol.
 
 <img src="docs/gameplay.gif" alt="Baiacu desviando dos corais e pegando pérolas" width="720">
 
@@ -14,6 +14,7 @@ Sem controle, sem instalar nada: só você, a câmera e um peixe muito estufado.
 ![HTML5](https://img.shields.io/badge/HTML5-canvas-ef6f4f?style=for-the-badge&logo=html5&logoColor=white)
 ![JavaScript](https://img.shields.io/badge/JavaScript-puro-f4c653?style=for-the-badge&logo=javascript&logoColor=0a2a40)
 ![MediaPipe](https://img.shields.io/badge/MediaPipe-mãos-3fb6c2?style=for-the-badge&logo=google&logoColor=white)
+![Web Audio](https://img.shields.io/badge/som-sintetizado-8fdcc0?style=for-the-badge)
 ![Sem build](https://img.shields.io/badge/build-nenhum-0c3f63?style=for-the-badge)
 
 </div>
@@ -24,23 +25,24 @@ Sem controle, sem instalar nada: só você, a câmera e um peixe muito estufado.
 
 | | | |
 |---|---|---|
-| 🚀 [Como rodar](#-como-rodar) | 🐡 [O baiacu](#-o-baiacu-tamanho-é-movimento) | 🎓 [Tutorial e calibração](#-tutorial-e-calibração) |
-| 🎮 [Como jogar](#-como-jogar) | 🪸 [Corais, pérolas e pontos](#-corais-pérolas-e-pontos) | ⏸️ [Pausa](#️-pausa) |
-| 🕹️ [Controles](#️-controles) | ❤️ [Vidas](#️-vidas) | 🤖 [Como a mão é detectada](#-como-a-mão-é-detectada) |
-| 🗺️ [Telas do jogo](#️-telas-do-jogo) | 📈 [Dificuldade](#-dificuldade) | 🆘 [Deu ruim?](#-deu-ruim) |
-| 🧩 [Código](#-estrutura-do-código) | 🔧 [Ajustes (`CFG`)](#-ajustando-o-jogo-cfg) | 🐛 [Depuração](#-depuração) · 🔒 [Privacidade](#-privacidade) |
+| 🚀 [Como rodar](#-como-rodar) | 🪸 [Corais, pérolas e pontos](#-corais-pérolas-e-pontos) | 🛍️ [Loja](#️-loja) |
+| 🎮 [Como jogar](#-como-jogar) | ❤️ [Vidas](#️-vidas) | 🔊 [Som](#-som) |
+| 🕹️ [Controles](#️-controles) | 📈 [Dificuldade](#-dificuldade) | 💾 [Progresso salvo](#-progresso-salvo) |
+| 🗺️ [Telas do jogo](#️-telas-do-jogo) | 🌊 [Zonas](#-zonas) | 🎓 [Tutorial e calibração](#-tutorial-e-calibração) |
+| 🐡 [O baiacu](#-o-baiacu-tamanho-é-movimento) | 🪙 [Moedas](#-moedas) | ⏸️ [Pausa](#️-pausa) |
+| 🤖 [Detecção da mão](#-como-a-mão-é-detectada) | 🆘 [Deu ruim?](#-deu-ruim) | 🧩 [Código](#-estrutura-do-código) · 🔧 [Ajustes](#-ajustando-o-jogo) |
 
 ---
 
 ## 🚀 Como rodar
 
-Não tem instalação nem build. São só três arquivos: `index.html`, `style.css` e `game.js`.
+Não tem instalação nem build. São só arquivos estáticos: `index.html`, `style.css` e três scripts comuns (`audio.js`, `loja.js`, `game.js`).
 
 1. Abra a pasta no **VS Code**.
 2. Instale a extensão **Live Server** e clique em **Go Live** (ou rode `npx serve` dentro da pasta).
 3. Abra o `http://localhost:...` no **Chrome** ou no **Edge** e libere a câmera. 📸
 
-> 💡 Abrir o `index.html` direto do disco também costuma funcionar, mas o navegador vai pedir a permissão da câmera toda vez.
+> 💡 Abrir o `index.html` direto do disco também funciona (os scripts não são módulos ES justamente para isso), mas o navegador vai pedir a permissão da câmera toda vez.
 
 ### ✅ O que você precisa
 
@@ -53,13 +55,15 @@ Não tem instalação nem build. São só três arquivos: `index.html`, `style.c
 
 ## 🎮 Como jogar
 
-<img src="docs/inicio.png" alt="Tela inicial do Baiacu" width="100%">
+<img src="docs/inicio.png" alt="Tela inicial do Baiacu, com o botão da loja e o saldo de moedas" width="100%">
 
 O fundo do mar rola sozinho da direita para a esquerda. O baiacu fica sempre na mesma posição horizontal: você controla **só a altura e o tamanho** dele.
 
 - 🪸 Passe pelas aberturas entre os corais sem encostar.
-- 🫧 Pegue as **pérolas** para ganhar pontos extras.
-- 🩷 Nas **fendas estreitas** (corais rosa), só passa baiacu magrinho.
+- 🫧 Pegue as **pérolas**: valem pontos **e** moedas.
+- 🩷 Nas **fendas estreitas** (corais rosa listrados), só passa baiacu magrinho.
+- 🌊 A cada 20 pontos o cenário muda de **zona**.
+- 🪙 No fim da partida, a pontuação vira **moedas** para gastar na **loja**.
 - ❤️ Você tem **3 vidas**. Acabou, acabou.
 
 > 🧠 **O pulo do gato (ou do peixe):** tamanho e movimento são a mesma coisa. Para **subir**, o baiacu precisa **inflar** e fica enorme. Para ficar **pequeno**, ele **murcha** e afunda. Atravessar uma fenda estreita pede a mão **meio aberta**: peixe médio, parado na altura certa.
@@ -90,11 +94,14 @@ No canto da tela aparece a prévia da câmera, com o **esqueleto da sua mão** d
 | Toques curtos | ↔️ Mantém a altura |
 | Segurar o clique / o dedo na tela | 👆 Igual a segurar o espaço |
 | **`P`** ou **`Esc`** | ⏸️ Pausa / retoma |
+| **`M`** | 🔇 Liga / desliga o som |
 | **`Enter`** | ✅ Aperta o botão principal da tela (Começar, Jogar de novo, Continuar) |
 
 No teclado, o baiacu não infla de uma vez: leva uns **0,4 s** para ir de murcho a totalmente inflado, e o mesmo para murchar.
 
 > 🔄 Dá para trocar da câmera para o teclado **no meio da partida**, pelo botão *Trocar para o teclado* da tela de pausa.
+
+> 🛍️ A **loja** é operada por mouse, toque ou teclado (`Tab`, `Enter`, setas entre as abas, `Esc` para voltar). Ela não usa a mão.
 
 ---
 
@@ -102,21 +109,24 @@ No teclado, o baiacu não infla de uma vez: leva uns **0,4 s** para ir de murcho
 
 ```
  🏠 Início ──► 🎓 Tutorial ──► 3️⃣2️⃣1️⃣ Contagem ──► 🎮 Jogando ──► 💀 Fim de jogo
-                    │                               │   ▲                 │
-                    └──── Pular tutorial ───────────┘   │                 ├── Jogar de novo ──► Contagem
-                                                    ⏸️ Pausa              └── Rever tutorial ──► Tutorial
+    │               │                               │   ▲                 │
+    │               └──── Pular tutorial ───────────┘   │                 ├── Jogar de novo ──► Contagem
+    │                                               ⏸️ Pausa              ├── Rever tutorial ──► Tutorial
+    └──────────────────────► 🛍️ Loja ◄────────────────────────────────────┘
 ```
 
 | | |
 |:---:|:---:|
-| <img src="docs/contagem.png" alt="Contagem regressiva"> | <img src="docs/fim.png" alt="Tela de fim de jogo"> |
-| **3, 2, 1…** O baiacu já responde à mão, para você se ajeitar. | **Fim de jogo**, com pontos e recorde da sessão. |
+| <img src="docs/contagem.png" alt="Contagem regressiva com o nome da zona"> | <img src="docs/fim.png" alt="Tela de fim de jogo com moedas ganhas"> |
+| **3, 2, 1…** com um bipe por número. O baiacu já responde à mão. | **Fim de jogo**: pontos, recorde e as moedas ganhas. |
 
-1. 🏠 **Início:** escolha *Jogar com a câmera* ou *Jogar com o teclado*. Mensagens de carregamento e de erro aparecem embaixo dos botões.
+1. 🏠 **Início:** *Jogar com a câmera*, *Jogar com o teclado* ou abrir a **Loja** (o saldo de moedas aparece no botão).
 2. 🎓 **Tutorial:** ensina os gestos passo a passo. Dá para pular.
-3. 3️⃣ **Contagem:** 3 segundos antes de o cenário andar.
-4. 🎮 **Jogando:** o botão *Pausar* fica no canto superior direito.
-5. 💀 **Fim de jogo:** *Jogar de novo* ou *Rever tutorial*.
+3. 3️⃣ **Contagem:** 3 segundos antes de o cenário andar. O nome da primeira zona aparece no alto.
+4. 🎮 **Jogando:** placar no centro; vidas, moedas e recorde à esquerda; *Pausar* à direita.
+5. 💀 **Fim de jogo:** pontos, recorde (com destaque quando é batido) e o resumo das moedas. Daqui você joga de novo, revê o tutorial ou vai à loja.
+
+🔊 O botão de som fica **sempre** no canto inferior esquerdo, em qualquer tela.
 
 📐 A tela se adapta à janela: a altura lógica é sempre 540 px e a largura acompanha a proporção da tela (mínimo de 520 px). **Tela mais larga = você enxerga mais corais à frente.**
 
@@ -135,27 +145,27 @@ Tudo o que você faz, com a mão ou com o teclado, vira um único número: a **a
 
 </div>
 
-- 📏 **Tamanho:** o raio vai de 13 px a 54 px. Os espinhos crescem quando ele infla, mas são **só enfeite**: para bater, conta só o corpo (88% do raio).
+- 📏 **Tamanho:** o raio vai de 13 px a 54 px. Os espinhos e as roupas são **só enfeite**: para bater, conta só o corpo (88% do raio).
 - ⚖️ **Ponto neutro:** abertura **0,5** = baiacu parado.
 - 😌 **Zona morta:** entre **0,43 e 0,57** ele também fica parado, para sua mão não precisar ser de estátua.
 - 🚀 **Velocidade:** quanto mais longe do neutro, mais rápido ele sobe ou desce, até **250 px/s**.
-- 🌊 **Inércia:** a velocidade muda suavemente, e o peixe inclina para o lado em que está indo.
+- 🌊 **Inércia:** a velocidade muda suavemente, e o peixe inclina para o lado em que está indo (as roupas inclinam junto).
 - 🏖️ **Teto e areia não machucam:** o baiacu só para ao encostar neles.
 
 ---
 
 ## 🪸 Corais, pérolas e pontos
 
-<img src="docs/fenda.png" alt="Baiacu passando por uma fenda estreita rosa" width="100%">
+<img src="docs/fenda.png" alt="Baiacu passando por uma fenda estreita rosa listrada" width="100%">
 
 ### Corais
 
 Cada obstáculo é um par de rochas (uma descendo do teto, outra subindo da areia) com uma passagem no meio.
 
-| Tipo | Cor | Altura da passagem | Largura | Pontos |
-|---|:---:|---|---|:---:|
-| 🧡 Coral normal | Laranja | 215 px → 170 px | 74 px | **+1** |
-| 🩷 Fenda estreita | Rosa | 100 px | 46 px | **+3** |
+| Tipo | Aparência | Altura da passagem | Largura | Pontos |
+|---|---|---|---|:---:|
+| 🧡 Coral normal | Cor da zona (laranja, âmbar ou verde-água) | 215 px → 170 px | 74 px | **+1** |
+| 🩷 Fenda estreita | **Magenta com listras claras**, em todas as zonas | 100 px | 46 px | **+3** |
 
 - 🧭 A altura da passagem muda de um coral para o outro, mas **no máximo 170 px**, então sempre dá para chegar.
 - 🩷 Fendas estreitas só aparecem **depois dos 4 primeiros corais**.
@@ -164,27 +174,28 @@ Cada obstáculo é um par de rochas (uma descendo do teto, outra subindo da arei
 
 ### Pérolas 🫧
 
-<img src="docs/perola.png" alt="Baiacu inflado prestes a pegar uma pérola" width="100%">
+<img src="docs/perola.png" alt="Baiacu prestes a pegar uma pérola" width="100%">
 
 - Cerca de **65%** dos corais trazem uma pérola, no meio do caminho até o próximo, numa altura sorteada.
-- Cada pérola vale **+2**. Ela é pega ao encostar no baiacu, então **inflado é mais fácil de pegar**. 😉
+- Cada pérola vale **+2 pontos** e **+1 moeda na hora**. Ela é pega ao encostar no baiacu, então **inflado é mais fácil de pegar**. 😉
 
 ### 🏆 Placar
 
-| Evento | Pontos |
-|---|:---:|
-| 🧡 Passar por coral normal sem bater | **+1** |
-| 🩷 Passar por fenda estreita sem bater | **+3** |
-| 🫧 Pegar uma pérola | **+2** |
+| Evento | Pontos | Moedas |
+|---|:---:|:---:|
+| 🧡 Passar por coral normal sem bater | **+1** | |
+| 🩷 Passar por fenda estreita sem bater | **+3** | |
+| 🫧 Pegar uma pérola | **+2** | **+1** na hora |
+| 💀 Fim da partida | | **metade dos pontos** (arredondada para baixo) |
 
-O placar fica no alto, no centro. O **recorde** vale para a sessão e some quando a página é recarregada.
+O **recorde** fica salvo no navegador e sobrevive a recarregar a página.
 
 ---
 
 ## ❤️ Vidas
 
-- 🐡🐡🐡 Você começa com **3 vidas**, mostradas como baiacuzinhos no canto superior esquerdo.
-- 💥 Encostou num coral: **perde uma vida**, a tela treme e o baiacu **pisca invencível por 1,6 s**.
+- 🐡🐡🐡 Você começa com **3 vidas**, mostradas como baiacuzinhos (na cor que você estiver usando) no canto superior esquerdo.
+- 💥 Encostou num coral: **perde uma vida**, ouve uma batida grave, a tela treme e o baiacu **pisca invencível por 1,6 s**.
 - 🛡️ Cada coral tira **no máximo uma vida**, mesmo que você continue encostado nele.
 - 💀 Zerou as vidas: **Fim de jogo**.
 
@@ -201,7 +212,124 @@ A dificuldade sobe com a **pontuação**, não com o tempo. Ela cresce aos pouco
 | 🚪 Passagem normal | 215 px | 170 px |
 | 🩷 Chance de fenda estreita | 14% | 38% |
 
-> ⚠️ Fendas e pérolas dão mais pontos, então **arriscar deixa o jogo mais difícil mais rápido**.
+> ⚠️ Fendas e pérolas dão mais pontos, então **arriscar deixa o jogo mais difícil mais rápido**. As zonas não mexem na dificuldade: são só visuais.
+
+---
+
+## 🌊 Zonas
+
+<img src="docs/zonas.png" alt="As quatro zonas: recife raso, floresta de algas, mar aberto ao entardecer e fundo escuro" width="100%">
+
+A cada **20 pontos** o cenário muda de zona, em ciclo (depois do fundo escuro, volta ao recife):
+
+| Pontos | Zona | Enfeite |
+|:---:|---|---|
+| 0–19 | 🐠 **Recife raso** | Cardumes de peixinhos ao longe |
+| 20–39 | 🌿 **Floresta de algas** | Algas gigantes com folhas balançando |
+| 40–59 | 🌅 **Mar aberto ao entardecer** | Sol baixo e reflexos na superfície |
+| 60–79 | 🌌 **Fundo escuro** | Plâncton e águas-vivas luminosos |
+
+- 🎨 Cada zona tem sua paleta: gradiente da água, algas, areia e corais.
+- 🌈 A troca é uma **transição de cores de 2 segundos**, nunca um corte seco, e o nome da zona aparece no alto por 2 segundos.
+- 👀 A fenda estreita é sempre **magenta e listrada**. O peixe e as pérolas têm um contorno fino que mantém o contraste em qualquer zona, inclusive no escuro.
+
+---
+
+## 🪙 Moedas
+
+- 🫧 **Cada pérola:** +1 moeda **na hora** (o saldo no canto da tela sobe na mesma hora).
+- 🏁 **No fim da partida:** a pontuação vira moedas na proporção de **10 pontos para 5 moedas** (`floor(pontos × 0,5)`).
+- 🧾 A tela de fim de jogo mostra **quanto veio das pérolas**, **quanto veio da pontuação** e o **saldo total**.
+- 💾 As moedas ficam salvas no navegador.
+
+Exemplo: uma partida com 37 pontos e 3 pérolas rende 3 + 18 = **21 moedas**.
+
+---
+
+## 🛍️ Loja
+
+| | |
+|:---:|:---:|
+| <img src="docs/loja-cores.png" alt="Loja, aba Cores"> | <img src="docs/loja-roupas.png" alt="Loja, aba Roupas"> |
+| **Cores:** o peixe inteiro muda de cor. | **Roupas:** uma por posição, combináveis. |
+
+A loja abre pela **tela inicial** e pela **tela de fim de jogo**. Cada item mostra uma miniatura desenhada com a mesma função que desenha o peixe no jogo, o preço e um destes estados:
+
+| Botão | Quando |
+|---|---|
+| **Comprar** | Você tem moedas suficientes. Comprar desconta o saldo, salva e já equipa. |
+| **Faltam N** (desabilitado) | Não dá ainda: mostra quanto falta. |
+| **Equipar** | Você já comprou, mas não está usando. |
+| **Equipado** | É o que você está usando agora. Nas roupas, o botão vira **Tirar**. |
+
+À esquerda fica uma prévia animada do seu baiacu com tudo o que está equipado.
+
+### 🎨 Cores
+
+Corpo, barriga, pintas, espinhos e nadadeiras mudam juntos.
+
+| Cor | Preço |
+|---|:---:|
+| 💛 Amarelo clássico | grátis (já vem equipado) |
+| 🧡 Coral | 🪙 40 |
+| 💚 Menta | 🪙 60 |
+| 💜 Lilás | 🪙 90 |
+| 💙 Azul-marinho (com contorno claro, para aparecer no fundo escuro) | 🪙 140 |
+| ✨ Dourado (com uma estrelinha que brilha) | 🪙 400 |
+
+### 🎩 Roupas
+
+<img src="docs/roupas.png" alt="Todas as roupas no baiacu grande e pequeno" width="100%">
+
+Três posições, **uma roupa por posição**, e dá para combinar as três:
+
+| Posição | Roupa | Preço |
+|---|---|:---:|
+| 🎩 Cabeça | Chapéu de palha | 🪙 50 |
+| | Boné | 🪙 80 |
+| | Cartola | 🪙 150 |
+| | Coroa | 🪙 300 |
+| 🕶️ Rosto | Óculos escuros | 🪙 70 |
+| | Monóculo | 🪙 120 |
+| 🎀 Pescoço | Gravata-borboleta | 🪙 60 |
+| | Cachecol | 🪙 100 |
+
+As roupas acompanham o tamanho e a inclinação do baiacu (de 13 a 54 px de raio) e **não mudam a colisão**.
+
+---
+
+## 🔊 Som
+
+Todo o som é **sintetizado na hora** com a Web Audio API. Não há nenhum arquivo de áudio.
+
+| Quando | Som |
+|---|---|
+| 🎮 Durante a partida | Um tom suave e baixinho cuja altura acompanha a abertura: **grave murcho, agudo inflado** |
+| 🫧 Pegou pérola | "Ploc" curto |
+| 💥 Bateu | Batida grave |
+| 🩷 Passou por fenda estreita | Efeito subindo |
+| 3️⃣ Contagem | Um bipe por número (o último é mais agudo) |
+| 💀 Fim de jogo | Quatro notas descendo |
+| 🏆 Novo recorde | Arpejo subindo com acorde final |
+
+- 🔇 **Botão de som sempre visível** no canto inferior esquerdo (ou tecla **`M`**). A preferência fica salva.
+- ⏸️ Tudo **silencia na pausa** e quando a **aba perde o foco**.
+- 🖱️ O áudio só começa depois do seu **primeiro clique ou tecla**, porque os navegadores bloqueiam som antes disso.
+
+---
+
+## 💾 Progresso salvo
+
+O jogo guarda no `localStorage` do navegador, numa única chave (`baiacu:v1`):
+
+- 🏆 recorde
+- 🪙 saldo de moedas
+- 🛍️ itens comprados e equipados
+- 🔊 preferência de som
+
+Se os dados estiverem ausentes, corrompidos, ou se o navegador bloquear o armazenamento (por exemplo, numa janela anônima restrita), o jogo **funciona normalmente** com os valores padrão, só não lembra de nada depois.
+
+> 🧹 Para zerar tudo: no console, `localStorage.removeItem('baiacu:v1')` e recarregue.
 
 ---
 
@@ -244,7 +372,7 @@ Cada mão é de um jeito: tem gente que abre muito, tem gente que não fecha tan
 | ⏸️ Botão *Pausar*, **`P`** ou **`Esc`** | *Continuar*, **`P`**, **`Esc`** ou **`Enter`**, com contagem de 3 s. |
 | 🗂️ Você trocou de aba ou minimizou | Igual à pausa manual. |
 
-Pontos e vidas ficam guardados durante a pausa. 💾
+Pontos e vidas ficam guardados durante a pausa, e o som fica mudo. 💾🔇
 
 ---
 
@@ -280,6 +408,8 @@ Pontos e vidas ficam guardados durante a pausa. 💾
 | ⬇️ O baiacu não desce | Feche bem o punho, ou refaça o tutorial. |
 | 🔁 Pausa toda hora | Melhore a luz, afaste a mão para caber inteira no quadro e evite fundos da cor da pele. |
 | 🐢 Controle tremido ou atrasado | Feche abas pesadas. Sem GPU, o detector roda na CPU e fica mais lento. |
+| 🔇 Sem som | Confira o botão de som (canto inferior esquerdo) e o volume do sistema. O som só começa depois do primeiro clique ou tecla. |
+| 🪙 Moedas e roupas sumiram | O progresso fica no navegador: outro navegador, outro perfil ou uma janela anônima começam do zero. |
 
 🔎 Detalhes técnicos dos erros aparecem no console do navegador, com o prefixo `[baiacu]`.
 
@@ -289,42 +419,49 @@ Pontos e vidas ficam guardados durante a pausa. 💾
 
 ```
 baiacu/
-├── 📄 index.html   Telas: início, tutorial, pausa, fim de jogo e prévia da câmera
-├── 🎨 style.css    Cartões, botões e prévia da câmera
-├── 🧠 game.js      Toda a lógica do jogo
+├── 📄 index.html   Telas: início, tutorial, pausa, fim de jogo, loja, botão de som e prévia da câmera
+├── 🎨 style.css    Cartões, botões, loja e prévia da câmera
+├── 🔊 audio.js     Som sintetizado (Web Audio API) → window.BaiacuSom
+├── 🛍️ loja.js      Catálogo, desenho das roupas e tela da loja → window.BaiacuLoja
+├── 🧠 game.js      Entrada, física, zonas, moedas, desenho e fluxo de telas
 ├── 🖼️ docs/        Imagens deste README
 └── 📘 README.md
 ```
 
-Nenhuma dependência local. O MediaPipe só é baixado (de CDN) quando você escolhe jogar com a câmera. Todo o visual é **desenhado em canvas 2D**, sem nenhuma imagem: o baiacu, os corais, as algas e as bolhas são feitos com código.
+Os scripts são carregados por `<script>` comum, nessa ordem: `audio.js`, `loja.js`, `game.js`. Nada de módulos ES, para o jogo abrir direto do disco. Todo o visual é **desenhado em canvas 2D**, sem nenhuma imagem: baiacu, roupas, corais, algas e bolhas são feitos com código.
 
 ### 🗂️ Por dentro do `game.js`
 
 | Seção | O que faz |
 |---|---|
 | ⚙️ `CFG` | Todos os números ajustáveis do jogo. |
-| 🎨 `C` | Paleta de cores do mar, dos corais e do baiacu. |
+| 🎨 `C` e `ZONES` | Cores fixas e a paleta de cada zona. |
+| 💾 `loadSave`, `persist` | Progresso no `localStorage`, à prova de dados corrompidos. |
 | 🖼️ `resize` | Ajusta o canvas à janela e à densidade de pixels da tela. |
 | ✋ Entrada (`startCamera`, `detect`, `handRatio`, `updateInput`, `drawCam`) | Liga a câmera, carrega o detector e transforma mão ou teclado na abertura de 0 a 1. |
-| 🐡 Jogo (`stepFish`, `stepWorld`, `spawnCol`) | Física, geração de corais e pérolas, colisões, pontos e vidas. |
+| 🐡 Jogo (`stepFish`, `stepWorld`, `spawnCol`) | Física, geração de corais e pérolas, colisões, pontos, vidas e moedas das pérolas. |
+| 🌊 Zonas (`updateZone`, `DECOS`) | Troca de zona, interpolação de cores e enfeites. |
 | 🎓 Tutorial (`STEPS`, `updateTutorial`) | Passos e calibração automática. |
-| 🗺️ Telas (`setState`, `pause`, `gameOver`) | Troca de telas, botões e atalhos. |
-| 🖌️ Desenho (`drawBackground`, `drawCols`, `drawFish`, `drawHud`, `render`) | Todo o visual. |
+| 🗺️ Telas (`setState`, `pause`, `gameOver`, `openShop`) | Troca de telas, botões, atalhos e som. |
+| 🖌️ Desenho (`drawBackground`, `drawCols`, `drawFish`, `drawHud`, `render`) | Todo o visual. `drawFish` desenha em qualquer canvas, por isso a loja também usa ela. |
 | 🔁 `frame` | Laço principal com `requestAnimationFrame` (passo de tempo limitado a 50 ms). |
 
-Estados do jogo: `start` → `tutorial` → `countdown` → `playing` ⇄ `paused` → `over`.
+Estados do jogo: `start` → `tutorial` → `countdown` → `playing` ⇄ `paused` → `over`, e `shop` a partir de `start` ou `over`.
 
 ### ♿ Acessibilidade
 
 - 🫨 Com **reduzir movimento** ligado no sistema (`prefers-reduced-motion`), a tela não treme ao bater.
-- 🔊 O tutorial usa `aria-live` e as mensagens usam `role="status"`, para leitores de tela.
-- ⌨️ Dá para jogar tudo só com o teclado.
+- 🔊 O tutorial usa `aria-live`, as mensagens usam `role="status"`, as abas da loja usam `role="tab"` e o botão de som usa `aria-pressed`.
+- 🩷 A fenda estreita se distingue por **listras**, não só pela cor.
+- ⌨️ Dá para jogar e comprar tudo só com o teclado.
 
 ---
 
-## 🔧 Ajustando o jogo (`CFG`)
+## 🔧 Ajustando o jogo
 
-Quer deixar mais fácil, mais difícil ou mais maluco? Mexa no objeto `CFG`, no topo do `game.js`:
+Todo valor ajustável fica numa tabela no topo do arquivo dele.
+
+### `CFG` (topo do `game.js`)
 
 | Chave | Padrão | O que é |
 |---|---|---|
@@ -348,6 +485,19 @@ Quer deixar mais fácil, mais difícil ou mais maluco? Mexa no objeto `CFG`, no 
 | `HAND_BACK` | 0.35 | Segundos com a mão de volta até retomar |
 | `RATIO_LO`, `RATIO_HI` | 1.0, 1.75 | Faixa padrão da razão dedos/palma (fechada → aberta) |
 | `SMOOTH_CAM`, `SMOOTH_KEYS` | 16, 30 | Suavização na câmera e no teclado (maior = mais rápido) |
+| `ZONE_SCORE` | 20 | Pontos por zona |
+| `ZONE_FADE` | 2 | Segundos de transição de cores entre zonas |
+| `ZONE_LABEL` | 2 | Segundos com o nome da zona na tela |
+| `COINS_PER_PEARL` | 1 | Moedas por pérola |
+| `COINS_PER_POINT` | 0.5 | Moedas por ponto no fim da partida (arredondado para baixo) |
+
+### Outras tabelas
+
+| Onde | O que ajustar |
+|---|---|
+| `ZONES` (topo do `game.js`) | Nome, enfeite e todas as cores de cada zona |
+| `SOM` (topo do `audio.js`) | Volumes, altura e filtro do tom contínuo |
+| `CORES`, `ROUPAS` (topo do `loja.js`) | Nomes, preços e cores dos itens da loja |
 
 🍳 **Receitas rápidas:**
 
@@ -355,6 +505,8 @@ Quer deixar mais fácil, mais difícil ou mais maluco? Mexa no objeto `CFG`, no 
 - 🩷 **Fendas mais tranquilas:** aumente `GAP_NARROW`.
 - 🎯 **Controle menos sensível:** aumente `DEAD` ou diminua `V_MAX`.
 - 📹 **Câmera tremendo:** diminua `SMOOTH_CAM` (fica mais suave, com um pouco mais de atraso).
+- 🪙 **Loja mais generosa:** aumente `COINS_PER_POINT` ou baixe os preços no `loja.js`.
+- 🔉 **Tom contínuo incomodando:** baixe `SOM.TOM_VOL` ou `SOM.TOM_FILTRO` no `audio.js`.
 
 ---
 
@@ -363,22 +515,26 @@ Quer deixar mais fácil, mais difícil ou mais maluco? Mexa no objeto `CFG`, no 
 O jogo deixa o estado dele exposto no console do navegador:
 
 ```js
-__baiacu.game    // estado, pontos, vidas, corais e pérolas
+__baiacu.game    // estado, pontos, vidas, corais, pérolas e moedas das pérolas da partida
 __baiacu.input   // modo, mão presente, razão bruta, faixa calibrada (lo/hi), abertura
 __baiacu.fish    // posição, velocidade e raio do baiacu
+__baiacu.save    // progresso salvo: recorde, moedas, itens, som
+__baiacu.zone    // zona atual e progresso da transição
 __baiacu.CFG     // ajustes, alteráveis em tempo real
 ```
 
 🧪 Truques:
 
 - `__baiacu.game.lives = 99` para jogar sem morrer.
+- `__baiacu.save.coins = 1000` para testar a loja (o valor só fica salvo depois da próxima compra ou partida).
+- `__baiacu.game.score = 60` para pular direto para o fundo escuro.
 - `__baiacu.input.raw` para ver a razão da sua mão enquanto abre e fecha.
 
 ---
 
 ## 🔒 Privacidade
 
-🛡️ O vídeo da câmera é processado **só no seu navegador**. Nenhuma imagem é gravada nem enviada para lugar nenhum. A internet só serve para baixar o detector, o modelo e as fontes.
+🛡️ O vídeo da câmera é processado **só no seu navegador**. Nenhuma imagem é gravada nem enviada para lugar nenhum. O progresso (recorde, moedas, itens, som) fica no `localStorage` do seu navegador e também não sai dele. A internet só serve para baixar o detector, o modelo e as fontes.
 
 <div align="center">
 

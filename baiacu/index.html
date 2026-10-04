@@ -14,6 +14,18 @@
 
   <button id="pauseBtn" hidden aria-label="Pausar">Pausar</button>
 
+  <button id="soundBtn" aria-pressed="true" aria-label="Desligar o som">
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+      <path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/>
+      <g class="on" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <path d="M16 9.5a3.5 3.5 0 0 1 0 5"/><path d="M18.5 7a7 7 0 0 1 0 10"/>
+      </g>
+      <g class="off" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <path d="M16 9.5l5 5M21 9.5l-5 5"/>
+      </g>
+    </svg>
+  </button>
+
   <div id="cam" hidden>
     <div id="camBox">
       <video id="video" playsinline muted></video>
@@ -54,6 +66,7 @@
         <button class="primary" id="btnCam">Jogar com a câmera</button>
         <button id="btnKeys">Jogar com o teclado</button>
       </div>
+      <button class="shop-open" id="btnShopStart">Loja <span class="wallet"><i class="coin" aria-hidden="true"></i><b id="startCoins">0</b> moedas</span></button>
       <p class="status" id="startStatus" role="status"></p>
       <p class="fine">O vídeo é analisado só no seu navegador. Nada é gravado nem enviado.</p>
     </div>
@@ -73,18 +86,50 @@
   <section class="screen" id="screenOver" hidden>
     <div class="card">
       <h2>Fim de jogo</h2>
+      <p class="badge" id="overRecord" hidden>Novo recorde!</p>
       <div class="score-line">
         <div><b id="overScore">0</b><span>Pontos</span></div>
-        <div><b id="overBest">0</b><span>Recorde da sessão</span></div>
+        <div class="best"><b id="overBest">0</b><span>Recorde</span></div>
       </div>
+      <dl class="earnings">
+        <div><dt>Das pérolas</dt><dd><i class="coin" aria-hidden="true"></i><span id="overPearlCoins">+0</span></dd></div>
+        <div><dt>Da pontuação</dt><dd><i class="coin" aria-hidden="true"></i><span id="overScoreCoins">+0</span></dd></div>
+        <div class="total"><dt>Saldo</dt><dd><i class="coin" aria-hidden="true"></i><span id="overCoins">0</span></dd></div>
+      </dl>
       <div class="row">
         <button class="primary" id="btnAgain">Jogar de novo</button>
         <button id="btnTutAgain">Rever tutorial</button>
+        <button id="btnShopOver">Loja</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="screen" id="screenShop" hidden aria-labelledby="shopTitle">
+    <div class="card shop">
+      <div class="shop-head">
+        <h2 id="shopTitle">Loja</h2>
+        <span class="wallet" aria-live="polite"><i class="coin" aria-hidden="true"></i><b id="shopCoins">0</b> moedas</span>
+      </div>
+      <div class="shop-body">
+        <canvas id="shopPreview" width="220" height="220" role="img" aria-label="Seu baiacu com o que está equipado"></canvas>
+        <div class="shop-main">
+          <div class="tabs" id="shopTabs" role="tablist" aria-label="Categorias">
+            <button role="tab" id="tabCores" aria-selected="true" aria-controls="shopList">Cores</button>
+            <button role="tab" id="tabRoupas" aria-selected="false" aria-controls="shopList" tabindex="-1">Roupas</button>
+          </div>
+          <div id="shopList" role="tabpanel" aria-label="Itens"></div>
+        </div>
+      </div>
+      <div class="shop-foot">
+        <span class="fine">Pérola: 1 moeda na hora. Fim de partida: 10 pontos viram 5 moedas.</span>
+        <button id="shopBack">Voltar</button>
       </div>
     </div>
   </section>
 </div>
 
+<script src="audio.js"></script>
+<script src="loja.js"></script>
 <script src="game.js"></script>
 </body>
 </html>

@@ -21,19 +21,46 @@ const CFG = {
   HAND_BACK: 0.35,             // segundos com mão até retomar
   RATIO_LO: 1.0, RATIO_HI: 1.75, // faixa da razão dedos/palma (fechada..aberta)
   SMOOTH_CAM: 16, SMOOTH_KEYS: 30,
+  ZONE_SCORE: 20,              // pontos por zona do cenário
+  ZONE_FADE: 2,                // segundos de transição de cores entre zonas
+  ZONE_LABEL: 2,               // segundos com o nome da zona na tela
+  COINS_PER_PEARL: 1,          // moedas por pérola, na hora
+  COINS_PER_POINT: 0.5,        // no fim da partida: floor(pontos * 0.5), ou seja, 10 pontos = 5 moedas
 };
 const MP_VERSION = '0.10.14';
 const MP_BASE = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VERSION}`;
 const MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
 
 const C = {
-  top: '#3fb6c2', bottom: '#0c3f63', ray: 'rgba(255,255,255,.07)',
-  kelp: 'rgba(8,52,78,.55)', kelpNear: 'rgba(6,40,62,.75)',
-  sand: '#e7d3a1', sandDark: '#cdb67f',
-  coral: '#ef6f4f', coralDark: '#c44f33', narrow: '#d4508c', narrowDark: '#a5346a',
-  body: '#f4c653', belly: '#fff3cf', spot: '#b98524', spike: '#d99f2e', fin: '#e8a93a',
-  ink: '#0a2a40', paper: '#fff7e3', pearl: '#fff3d6',
+  hand: '#f4c653',                                        // esqueleto da mão na prévia da câmera
+  ink: '#0a2a40', paper: '#fff7e3', pearl: '#fff3d6', outline: 'rgba(10,42,64,.4)',
+  coin: '#f5c542', coinDark: '#b8860b',
 };
+
+/* Zonas do cenário, em ciclo a cada CFG.ZONE_SCORE pontos. Só mudam o visual.
+   A fenda estreita fica sempre num magenta, longe da cor do coral normal, e ainda ganha listras claras. */
+const ZONES = [
+  { name: 'Recife raso', deco: 'cardume',
+    top: '#3fb6c2', bottom: '#0c3f63', ray: 'rgba(255,255,255,.07)', bubble: 'rgba(255,255,255,.22)',
+    kelp: 'rgba(8,52,78,.55)', kelpNear: 'rgba(6,40,62,.75)', sand: '#e7d3a1', sandDark: '#cdb67f',
+    coral: '#ef6f4f', coralDark: '#c44f33', narrow: '#d4508c', narrowDark: '#a5346a',
+    decoColor: 'rgba(8,52,78,.38)' },
+  { name: 'Floresta de algas', deco: 'algas',
+    top: '#5cb89a', bottom: '#0d4038', ray: 'rgba(255,255,220,.08)', bubble: 'rgba(235,255,240,.25)',
+    kelp: 'rgba(18,78,46,.6)', kelpNear: 'rgba(10,56,34,.82)', sand: '#d8cd9c', sandDark: '#b5a874',
+    coral: '#f08a3c', coralDark: '#c0661f', narrow: '#d64f93', narrowDark: '#a3326c',
+    decoColor: 'rgba(24,96,54,.5)' },
+  { name: 'Mar aberto ao entardecer', deco: 'sol',
+    top: '#f2a271', bottom: '#35295e', ray: 'rgba(255,214,170,.12)', bubble: 'rgba(255,236,220,.28)',
+    kelp: 'rgba(70,40,90,.45)', kelpNear: 'rgba(50,28,70,.72)', sand: '#e6c09b', sandDark: '#c39a78',
+    coral: '#2fa59b', coralDark: '#1d7a72', narrow: '#d63f86', narrowDark: '#9e2660',
+    decoColor: 'rgba(255,226,168,.9)' },
+  { name: 'Fundo escuro', deco: 'luzes',
+    top: '#0f2f4f', bottom: '#020a17', ray: 'rgba(120,200,255,.035)', bubble: 'rgba(160,220,255,.18)',
+    kelp: 'rgba(20,50,80,.55)', kelpNear: 'rgba(10,30,52,.8)', sand: '#2e3b4f', sandDark: '#212c3d',
+    coral: '#e2683f', coralDark: '#a8492a', narrow: '#ff6fc0', narrowDark: '#c24690',
+    decoColor: 'rgba(127,243,255,1)' },
+];
 
 const $ = (id) => document.getElementById(id);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -41,6 +68,46 @@ const lerp = (a, b, t) => a + (b - a) * t;
 const rand = (a, b) => a + Math.random() * (b - a);
 const hash = (n) => { const s = Math.sin(n * 127.1) * 43758.5453; return s - Math.floor(s); };
 const reducedMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ============================================================
+   Progresso salvo: um único objeto JSON no localStorage.
+   Se o armazenamento falhar ou vier corrompido, o jogo segue com os padrões.
+   ============================================================ */
+const loja = window.BaiacuLoja;   // loja.js
+const SAVE_KEY = 'baiacu:v1';
+const saveDefaults = () => ({
+  best: 0, coins: 0, sound: true,
+  owned: ['amarelo'],
+  equipped: { cor: 'amarelo', cabeca: null, rosto: null, pescoco: null },
+});
+const nonNegInt = (v) => (Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0);
+
+function loadSave() {
+  const s = saveDefaults();
+  let data = null;
+  try { data = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (_) { /* fica com os padrões */ }
+  if (!data || typeof data !== 'object') return s;
+  s.best = nonNegInt(data.best);
+  s.coins = nonNegInt(data.coins);
+  if (typeof data.sound === 'boolean') s.sound = data.sound;
+  if (Array.isArray(data.owned)) {
+    s.owned = [...new Set([...s.owned, ...data.owned.filter((id) => typeof id === 'string')])];
+  }
+  if (data.equipped && typeof data.equipped === 'object') {
+    for (const slot of Object.keys(s.equipped)) {
+      const id = data.equipped[slot];
+      if (typeof id === 'string' && s.owned.includes(id)) s.equipped[slot] = id;
+    }
+  }
+  return loja.validar(s);   // descarta itens que não existem no catálogo
+}
+function persist() {
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (_) { /* sem armazenamento: só não salva */ }
+}
+const save = loadSave();
+
+const som = window.BaiacuSom;   // audio.js
+som.setLigado(save.sound);
 
 /* ---------- canvas ---------- */
 const stage = $('stage'), canvas = $('game'), ctx = canvas.getContext('2d');
@@ -152,7 +219,7 @@ function drawCam() {
   $('camBar').style.width = pct + '%';
   $('camPct').textContent = pct + '%';
   if (!input.lm) return;
-  camCtx.lineWidth = 4; camCtx.lineCap = 'round'; camCtx.strokeStyle = C.body;
+  camCtx.lineWidth = 4; camCtx.lineCap = 'round'; camCtx.strokeStyle = C.hand;
   camCtx.beginPath();
   for (const [a, b] of BONES) {
     camCtx.moveTo(input.lm[a].x * w, input.lm[a].y * h);
@@ -169,15 +236,15 @@ function drawCam() {
 const fish = { x: 260, y: CFG.H / 2, vy: 0, r: 30 };
 const game = {
   state: 'start',      // start | tutorial | countdown | playing | paused | over
-  t: 0, dist: 0, score: 0, best: 0, lives: CFG.LIVES, passed: 0,
+  t: 0, dist: 0, score: 0, lives: CFG.LIVES, passed: 0,
   inv: 0, shake: 0, count: 0, nextCol: 0, lastGapY: CFG.H / 2,
-  cols: [], pearls: [], puffs: [], pauseReason: null,
+  cols: [], pearls: [], puffs: [], pauseReason: null, pearlCoins: 0,
 };
 const level = () => clamp(game.score / CFG.LEVEL_SCORE, 0, 1);
 const speed = () => lerp(CFG.SPEED[0], CFG.SPEED[1], level());
 
 function resetRun() {
-  Object.assign(game, { dist: 0, score: 0, lives: CFG.LIVES, passed: 0, inv: 0, shake: 0,
+  Object.assign(game, { dist: 0, score: 0, lives: CFG.LIVES, passed: 0, inv: 0, shake: 0, pearlCoins: 0,
     cols: [], pearls: [], puffs: [], lastGapY: CFG.H / 2 });
   game.nextCol = W + 120;
   fish.y = CFG.H / 2; fish.vy = 0;
@@ -244,16 +311,24 @@ function stepWorld(dt) {
          circleRect(fish.x, fish.y, cr, c.x, botY, c.w, CFG.H - botY))) {
       c.hit = true; game.lives -= 1; game.inv = CFG.INV; game.shake = 0.3;
       puff(fish.x, fish.y, 14, C.paper);
+      som.tocar('batida');
       if (game.lives <= 0) return gameOver();
     }
     if (!c.done && c.x + c.w < fish.x - fish.r) {
       c.done = true; game.passed += 1;
-      if (!c.hit) game.score += c.narrow ? 3 : 1;
+      if (!c.hit) {
+        game.score += c.narrow ? 3 : 1;
+        if (c.narrow) som.tocar('fenda');
+      }
     }
   }
   for (const p of game.pearls) {
     if (Math.hypot(p.x - fish.x, p.y - fish.y) < fish.r + p.r) {
       p.got = true; game.score += 2; puff(p.x, p.y, 8, C.pearl);
+      game.pearlCoins += CFG.COINS_PER_PEARL;           // a moeda da pérola entra na hora
+      save.coins += CFG.COINS_PER_PEARL;
+      persist();
+      som.tocar('perola');
     }
   }
 }
@@ -261,6 +336,35 @@ function stepWorld(dt) {
 function stepPuffs(dt) {
   for (const p of game.puffs) { p.x += p.vx * dt; p.y += p.vy * dt; p.vy -= 60 * dt; p.life -= dt; }
   game.puffs = game.puffs.filter((p) => p.life > 0);
+}
+
+/* ============================================================
+   Zonas: a paleta do cenário vem de ZONES e muda aos poucos.
+   ============================================================ */
+const parseColor = (s) => (s[0] === '#'
+  ? [1, 3, 5].map((i) => parseInt(s.slice(i, i + 2), 16)).concat(1)
+  : s.match(/[\d.]+/g).map(Number));
+const ZONE_KEYS = Object.keys(ZONES[0]).filter((k) => k !== 'name' && k !== 'deco');
+const zonePal = ZONES.map((z) => Object.fromEntries(ZONE_KEYS.map((k) => [k, parseColor(z[k])])));
+const mixPal = (a, b, t) => Object.fromEntries(ZONE_KEYS.map((k) => [k, a[k].map((v, i) => lerp(v, b[k][i], t))]));
+const toCss = ([r, g, b, a]) => `rgba(${Math.round(r)},${Math.round(g)},${Math.round(b)},${a.toFixed(3)})`;
+
+// idx: zona atual; prev: a anterior, que ainda aparece durante a transição; P: cores em uso neste quadro.
+const zone = { idx: 0, prev: 0, from: zonePal[0], t: 1, label: 0, P: {} };
+const zoneEase = () => zone.t * zone.t * (3 - 2 * zone.t);
+const zoneRaw = () => (zone.t >= 1 ? zonePal[zone.idx] : mixPal(zone.from, zonePal[zone.idx], zoneEase()));
+
+function updateZone(dt) {
+  const i = Math.floor(game.score / CFG.ZONE_SCORE) % ZONES.length;
+  if (i !== zone.idx) {
+    zone.from = zoneRaw();          // parte da cor atual, mesmo se uma transição ainda estiver no meio
+    zone.prev = zone.idx; zone.idx = i; zone.t = 0;
+    zone.label = CFG.ZONE_LABEL;
+  }
+  zone.t = Math.min(1, zone.t + dt / CFG.ZONE_FADE);
+  zone.label = Math.max(0, zone.label - dt);
+  const raw = zoneRaw();
+  for (const k of ZONE_KEYS) zone.P[k] = toCss(raw[k]);
 }
 
 /* ============================================================
@@ -342,11 +446,18 @@ function setState(s) {
   $('tutorial').hidden = s !== 'tutorial';
   $('screenPause').hidden = s !== 'paused';
   $('screenOver').hidden = s !== 'over';
+  $('screenShop').hidden = s !== 'shop';
+  $('startCoins').textContent = save.coins;
   $('pauseBtn').hidden = !(s === 'playing' || s === 'countdown');
   $('cam').hidden = input.mode !== 'cam';
+  updateQuiet();
 }
-function startGame() { resetRun(); beginCountdown(); }
-function beginCountdown() { game.count = 3; setState('countdown'); }
+function startGame() {
+  resetRun();
+  zone.label = CFG.ZONE_LABEL;   // a partida começa "entrando" na primeira zona
+  beginCountdown();
+}
+function beginCountdown() { game.count = 3; setState('countdown'); som.tocar('bipe', 3); }
 function pause(reason) {
   if (game.state !== 'playing' && game.state !== 'countdown') return;
   game.pauseReason = reason;
@@ -360,10 +471,50 @@ function pause(reason) {
   setState('paused');
 }
 function gameOver() {
-  game.best = Math.max(game.best, game.score);
+  const record = game.score > save.best;
+  if (record) save.best = game.score;
+  const scoreCoins = Math.floor(game.score * CFG.COINS_PER_POINT);
+  save.coins += scoreCoins;
+  persist();
+  $('overPearlCoins').textContent = '+' + game.pearlCoins;
+  $('overScoreCoins').textContent = '+' + scoreCoins;
+  $('overCoins').textContent = save.coins;
   $('overScore').textContent = game.score;
-  $('overBest').textContent = game.best;
+  $('overBest').textContent = save.best;
+  $('overRecord').hidden = !record;
+  $('screenOver').classList.toggle('record', record);
   setState('over');
+  som.tocar(record ? 'recorde' : 'fim');
+}
+
+/* ---------- loja: abre a partir do início ou do fim de jogo e volta para lá ---------- */
+let shopFrom = 'start';
+function openShop() {
+  shopFrom = game.state;
+  setState('shop');
+  loja.abrir();
+}
+function closeShop() {
+  $('overCoins').textContent = save.coins;
+  setState(shopFrom);
+  $(shopFrom === 'over' ? 'btnShopOver' : 'btnShopStart').focus();
+}
+
+/* ---------- som: botão, foco da aba ---------- */
+let pageFocused = true;
+// Silêncio na pausa e quando a aba perde o foco. A preferência do botão é outra camada, em audio.js.
+function updateQuiet() { som.setQuieto(game.state === 'paused' || !pageFocused || document.hidden); }
+function showSound() {
+  const b = $('soundBtn');
+  b.setAttribute('aria-pressed', String(save.sound));
+  b.setAttribute('aria-label', save.sound ? 'Desligar o som' : 'Ligar o som');
+  b.title = save.sound ? 'Som ligado (M)' : 'Som desligado (M)';
+}
+function toggleSound() {
+  save.sound = !save.sound;
+  persist();
+  som.setLigado(save.sound);
+  showSound();
 }
 
 const CAM_ERRORS = {
@@ -394,6 +545,13 @@ $('btnTutAgain').addEventListener('click', startTutorial);
 $('btnResume').addEventListener('click', beginCountdown);
 $('pauseBtn').addEventListener('click', () => pause('manual'));
 $('btnToKeys').addEventListener('click', () => { input.mode = 'keys'; input.target = input.open; beginCountdown(); });
+$('btnShopStart').addEventListener('click', openShop);
+$('btnShopOver').addEventListener('click', openShop);
+$('shopBack').addEventListener('click', closeShop);
+$('soundBtn').addEventListener('click', (e) => {
+  toggleSound();
+  if (e.detail) e.currentTarget.blur();   // clique de mouse: tira o foco para o espaço não religar o botão
+});
 
 const HOLD_KEYS = new Set(['Space', 'ArrowUp', 'KeyW']);
 addEventListener('keydown', (e) => {
@@ -405,17 +563,20 @@ addEventListener('keydown', (e) => {
     const b = [...document.querySelectorAll('button.primary')].find((el) => el.offsetParent !== null && !el.disabled);
     if (b && b.id !== 'btnCam') b.click();
   }
+  if (e.code === 'Escape' && game.state === 'shop') { closeShop(); return; }
   if (e.code === 'KeyP' || e.code === 'Escape') {
     if (game.state === 'paused' && game.pauseReason !== 'hand') beginCountdown();
     else pause('manual');
   }
+  if (e.code === 'KeyM' && !e.repeat) toggleSound();
 });
 addEventListener('keyup', (e) => { if (HOLD_KEYS.has(e.code)) input.held = false; });
 canvas.addEventListener('pointerdown', () => { input.held = true; });
 addEventListener('pointerup', () => { input.held = false; });
 addEventListener('pointercancel', () => { input.held = false; });
-addEventListener('blur', () => { input.held = false; });
-document.addEventListener('visibilitychange', () => { if (document.hidden) pause('manual'); });
+addEventListener('blur', () => { input.held = false; pageFocused = false; updateQuiet(); });
+addEventListener('focus', () => { pageFocused = true; updateQuiet(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) pause('manual'); updateQuiet(); });
 addEventListener('resize', resize);
 
 /* ============================================================
@@ -428,20 +589,28 @@ function rr(x, y, w, h, r) {
   ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
 }
 
+const wrap = (v, span) => ((v % span) + span) % span;
+
 function drawBackground(t) {
+  const P = zone.P;
   const g = ctx.createLinearGradient(0, 0, 0, CFG.H);
-  g.addColorStop(0, C.top); g.addColorStop(1, C.bottom);
+  g.addColorStop(0, P.top); g.addColorStop(1, P.bottom);
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, CFG.H);
 
-  ctx.fillStyle = C.ray;                                  // raios de luz
+  // Enfeite da zona: o da zona anterior some enquanto o da nova aparece.
+  const e = zoneEase();
+  if (zone.t < 1 && zone.prev !== zone.idx) drawDeco(ZONES[zone.prev].deco, 1 - e, t);
+  drawDeco(ZONES[zone.idx].deco, e, t);
+
+  ctx.fillStyle = P.ray;                                  // raios de luz
   for (let i = 0; i < 5; i++) {
     const x = ((i * 310 - game.dist * 0.05) % (W + 400) + W + 400) % (W + 400) - 200;
     ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x + 70, 0); ctx.lineTo(x - 90, CFG.H); ctx.lineTo(x - 220, CFG.H); ctx.fill();
   }
-  kelpLayer(0.25, 150, C.kelp, 0.7, t, 11);               // algas ao fundo
-  kelpLayer(0.5, 210, C.kelpNear, 1, t, 29);
+  kelpLayer(0.25, 150, P.kelp, 0.7, t, 11);               // algas ao fundo
+  kelpLayer(0.5, 210, P.kelpNear, 1, t, 29);
 
-  ctx.fillStyle = 'rgba(255,255,255,.22)';                // bolhas soltas
+  ctx.fillStyle = P.bubble;                               // bolhas soltas
   for (let i = 0; i < 16; i++) {
     const bx = ((hash(i + 3) * 1600 - game.dist * 0.6) % (W + 60) + W + 60) % (W + 60) - 30;
     const by = CFG.FLOOR - ((t * (18 + hash(i) * 30) + hash(i + 9) * CFG.FLOOR) % CFG.FLOOR);
@@ -459,17 +628,104 @@ function kelpLayer(par, period, color, size, t, seed) {
     ctx.stroke();
   }
 }
+/* ---------- enfeites de cada zona, desenhados atrás das algas ---------- */
+const DECOS = {
+  // Cardumes de peixinhos ao longe.
+  cardume(t) {
+    ctx.fillStyle = zone.P.decoColor;
+    const span = W + 320;
+    for (let s = 0; s < 3; s++) {
+      const cx = wrap(hash(s + 40) * span - game.dist * 0.12 - t * 16, span) - 160;
+      const cy = 90 + hash(s + 41) * 230;
+      for (let i = 0; i < 7; i++) {
+        const fx = cx + (hash(s * 10 + i) - 0.5) * 130;
+        const fy = cy + (hash(s * 10 + i + 5) - 0.5) * 70 + Math.sin(t * 2 + i) * 4;
+        ctx.beginPath(); ctx.ellipse(fx, fy, 9, 4, 0, 0, 6.283); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(fx + 7, fy); ctx.lineTo(fx + 14, fy - 4); ctx.lineTo(fx + 14, fy + 4); ctx.fill();
+      }
+    }
+  },
+  // Algas gigantes com folhas, bem ao fundo.
+  algas(t) {
+    ctx.fillStyle = ctx.strokeStyle = zone.P.decoColor; ctx.lineCap = 'round'; ctx.lineWidth = 5;
+    const period = 125, par = 0.12, off = (game.dist * par) % period;
+    for (let x = -off - period, n = Math.floor((game.dist * par) / period); x < W + period; x += period, n++) {
+      const h = 300 + hash(n + 71) * 170, sway = Math.sin(t * 0.7 + n) * 18;
+      const y0 = CFG.FLOOR, cx = x + sway * 0.4, cy = y0 - h * 0.5, x2 = x + sway, y2 = y0 - h;
+      ctx.beginPath(); ctx.moveTo(x, y0); ctx.quadraticCurveTo(cx, cy, x2, y2); ctx.stroke();
+      for (let k = 1; k < 9; k++) {                       // folhas ao longo da curva
+        const f = k / 9, u = 1 - f, side = k % 2 ? 1 : -1;
+        const lx = u * u * x + 2 * u * f * cx + f * f * x2, ly = u * u * y0 + 2 * u * f * cy + f * f * y2;
+        ctx.beginPath(); ctx.ellipse(lx + side * 9, ly, 12, 4.5, side * 0.5, 0, 6.283); ctx.fill();
+      }
+    }
+  },
+  // Sol baixo visto através da superfície.
+  sol(t) {
+    const x = W * 0.7, y = 26, r = 64;
+    const g = ctx.createRadialGradient(x, y, r * 0.4, x, y, r * 3.4);
+    g.addColorStop(0, 'rgba(255,230,170,.5)'); g.addColorStop(1, 'rgba(255,230,170,0)');
+    ctx.fillStyle = g; ctx.fillRect(x - r * 3.4, 0, r * 6.8, y + r * 3.4);
+    ctx.fillStyle = zone.P.decoColor; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.283); ctx.fill();
+    ctx.fillStyle = 'rgba(255,240,210,.35)';              // reflexos na superfície
+    for (let i = 0; i < 6; i++) {
+      const lx = wrap(hash(i + 60) * 900 - t * 12, W + 200) - 100;
+      ctx.fillRect(lx, 8 + i * 9, 40 + hash(i + 61) * 70, 2);
+    }
+  },
+  // Plâncton e águas-vivas luminosos no escuro.
+  luzes(t) {
+    const base = ctx.globalAlpha;
+    ctx.fillStyle = zone.P.decoColor;
+    for (let i = 0; i < 36; i++) {
+      const x = wrap(hash(i + 90) * 2000 - game.dist * 0.3, W + 40) - 20;
+      const y = 40 + hash(i + 91) * (CFG.FLOOR - 90) + Math.sin(t * 0.8 + i) * 8;
+      const pulse = 0.5 + 0.5 * Math.sin(t * (1.5 + hash(i + 92) * 2) + i);
+      const r = 1.2 + hash(i + 93) * 2;
+      ctx.globalAlpha = base * (0.12 + 0.18 * pulse);
+      ctx.beginPath(); ctx.arc(x, y, r * 3.5, 0, 6.283); ctx.fill();
+      ctx.globalAlpha = base * (0.4 + 0.5 * pulse);
+      ctx.beginPath(); ctx.arc(x, y, r, 0, 6.283); ctx.fill();
+    }
+    ctx.strokeStyle = zone.P.decoColor; ctx.lineWidth = 1.5;
+    for (let j = 0; j < 3; j++) {
+      const x = wrap(hash(j + 120) * 1500 - game.dist * 0.15 - t * 6, W + 120) - 60;
+      const y = 120 + hash(j + 121) * 220 + Math.sin(t * 0.9 + j * 2) * 18;
+      const s = 12 + hash(j + 122) * 8, squash = 1 + Math.sin(t * 2.2 + j) * 0.08;
+      ctx.globalAlpha = base * 0.28;
+      ctx.beginPath(); ctx.ellipse(x, y, s * squash, s / squash, 0, Math.PI, 0); ctx.fill();
+      ctx.globalAlpha = base * 0.4;
+      for (let k = -1.5; k <= 1.5; k++) {
+        ctx.beginPath(); ctx.moveTo(x + k * s * 0.4, y);
+        ctx.quadraticCurveTo(x + k * s * 0.4 + Math.sin(t * 2 + k) * 5, y + s, x + k * s * 0.4, y + s * 2.2);
+        ctx.stroke();
+      }
+    }
+    ctx.globalAlpha = base;
+  },
+};
+function drawDeco(name, alpha, t) {
+  if (alpha <= 0.01) return;
+  ctx.save(); ctx.globalAlpha = alpha;
+  DECOS[name](t);
+  ctx.restore();
+}
+
 function drawFloor() {
-  ctx.fillStyle = C.sandDark; ctx.fillRect(0, CFG.FLOOR, W, CFG.H - CFG.FLOOR);
-  ctx.fillStyle = C.sand;
+  ctx.fillStyle = zone.P.sandDark; ctx.fillRect(0, CFG.FLOOR, W, CFG.H - CFG.FLOOR);
+  ctx.fillStyle = zone.P.sand;
   ctx.beginPath(); ctx.moveTo(0, CFG.H);
   for (let x = 0; x <= W + 40; x += 40) ctx.lineTo(x, CFG.FLOOR + 6 + Math.sin((x + game.dist) * 0.02) * 5);
   ctx.lineTo(W + 40, CFG.H); ctx.fill();
 }
 
-function drawRock(x, y, w, h, tipDown, color, dark, seed) {
+function drawRock(x, y, w, h, tipDown, color, dark, seed, striped) {
   const lip = 20, ex = 7;
   ctx.fillStyle = color; rr(x, y, w, h, 12); ctx.fill();
+  if (striped) {                                          // listras: a fenda estreita se distingue até sem cor
+    ctx.fillStyle = 'rgba(255,255,255,.2)';
+    for (let yy = y + 14; yy < y + h - 14; yy += 26) ctx.fillRect(x + 4, yy, w - 8, 6);
+  }
   ctx.fillStyle = dark;                                   // poros
   for (let i = 0, yy = y + 30; yy < y + h - 30; i++, yy += 36) {
     ctx.beginPath();
@@ -484,9 +740,10 @@ function drawRock(x, y, w, h, tipDown, color, dark, seed) {
 function drawCols() {
   for (const c of game.cols) {
     const topH = c.cy - c.gapH / 2, botY = c.cy + c.gapH / 2;
-    const col = c.narrow ? C.narrow : C.coral, dark = c.narrow ? C.narrowDark : C.coralDark;
-    drawRock(c.x, -30, c.w, topH + 30, true, col, dark, c.seed);
-    drawRock(c.x, botY, c.w, CFG.FLOOR - botY + 30, false, col, dark, c.seed + 50);
+    const P = zone.P;
+    const col = c.narrow ? P.narrow : P.coral, dark = c.narrow ? P.narrowDark : P.coralDark;
+    drawRock(c.x, -30, c.w, topH + 30, true, col, dark, c.seed, c.narrow);
+    drawRock(c.x, botY, c.w, CFG.FLOOR - botY + 30, false, col, dark, c.seed + 50, c.narrow);
   }
 }
 function drawPearls(t) {
@@ -494,55 +751,75 @@ function drawPearls(t) {
     const y = p.y + Math.sin(t * 2.4 + p.ph) * 5;
     ctx.fillStyle = 'rgba(255,243,214,.25)'; ctx.beginPath(); ctx.arc(p.x, y, p.r + 7, 0, 6.283); ctx.fill();
     ctx.fillStyle = C.pearl; ctx.beginPath(); ctx.arc(p.x, y, p.r, 0, 6.283); ctx.fill();
+    ctx.strokeStyle = C.outline; ctx.lineWidth = 1.5; ctx.stroke();   // contorno: contraste em água clara
     ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(p.x - 3.5, y - 3.5, 3, 0, 6.283); ctx.fill();
   }
 }
 
-function drawFish(x, y, r, o, t) {
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.rotate(clamp(fish.vy / 700, -0.3, 0.3));
+/* Desenha o baiacu em qualquer contexto 2D (o jogo, a prévia e as miniaturas da loja usam esta mesma função).
+   tilt: inclinação em radianos; look: { cor, roupas } vindo de loja.visual(). */
+function drawFish(g, x, y, r, o, t, tilt, look) {
+  const S = look.cor;
+  g.save();
+  g.translate(x, y);
+  g.rotate(tilt);
   const wag = Math.sin(t * 9) * 0.3;
 
-  ctx.fillStyle = C.fin;                                  // cauda
-  ctx.beginPath();
-  ctx.moveTo(-r * 0.8, 0);
-  ctx.lineTo(-r * 1.25 - 12, -r * 0.3 - 8 + wag * 9);
-  ctx.lineTo(-r * 1.1 - 8, wag * 5);
-  ctx.lineTo(-r * 1.25 - 12, r * 0.3 + 8 + wag * 9);
-  ctx.closePath(); ctx.fill();
+  g.fillStyle = S.fin;                                    // cauda
+  g.beginPath();
+  g.moveTo(-r * 0.8, 0);
+  g.lineTo(-r * 1.25 - 12, -r * 0.3 - 8 + wag * 9);
+  g.lineTo(-r * 1.1 - 8, wag * 5);
+  g.lineTo(-r * 1.25 - 12, r * 0.3 + 8 + wag * 9);
+  g.closePath(); g.fill();
 
   const n = 20, sl = 2 + o * o * r * 0.3;                 // espinhos crescem com a abertura
-  ctx.fillStyle = C.spike;
+  g.fillStyle = S.spike;
   for (let i = 0; i < n; i++) {
     const a = (i / n) * 6.283 + 0.16;
     if (Math.abs(a - 6.283) < 0.5 || a < 0.5) continue;   // deixa a cara livre
     const ca = Math.cos(a), sa = Math.sin(a), bw = 0.11;
-    ctx.beginPath();
-    ctx.moveTo(Math.cos(a - bw) * r * 0.97, Math.sin(a - bw) * r * 0.97);
-    ctx.lineTo(ca * (r + sl), sa * (r + sl));
-    ctx.lineTo(Math.cos(a + bw) * r * 0.97, Math.sin(a + bw) * r * 0.97);
-    ctx.fill();
+    g.beginPath();
+    g.moveTo(Math.cos(a - bw) * r * 0.97, Math.sin(a - bw) * r * 0.97);
+    g.lineTo(ca * (r + sl), sa * (r + sl));
+    g.lineTo(Math.cos(a + bw) * r * 0.97, Math.sin(a + bw) * r * 0.97);
+    g.fill();
   }
 
-  ctx.fillStyle = C.body; ctx.beginPath(); ctx.arc(0, 0, r, 0, 6.283); ctx.fill();
-  ctx.save(); ctx.beginPath(); ctx.arc(0, 0, r, 0, 6.283); ctx.clip();
-  ctx.fillStyle = C.belly; ctx.beginPath(); ctx.ellipse(r * 0.1, r * 0.95, r * 1.15, r * 0.75, 0, 0, 6.283); ctx.fill();
-  ctx.fillStyle = C.spot;
+  g.fillStyle = S.body; g.beginPath(); g.arc(0, 0, r, 0, 6.283); g.fill();
+  g.save(); g.beginPath(); g.arc(0, 0, r, 0, 6.283); g.clip();
+  g.fillStyle = S.belly; g.beginPath(); g.ellipse(r * 0.1, r * 0.95, r * 1.15, r * 0.75, 0, 0, 6.283); g.fill();
+  g.fillStyle = S.spot;
   for (const [sx, sy, sr] of [[-0.45, -0.5, 0.11], [-0.1, -0.68, 0.09], [-0.62, -0.12, 0.08], [0.18, -0.42, 0.07]]) {
-    ctx.beginPath(); ctx.arc(sx * r, sy * r, Math.max(1.5, sr * r), 0, 6.283); ctx.fill();
+    g.beginPath(); g.arc(sx * r, sy * r, Math.max(1.5, sr * r), 0, 6.283); g.fill();
   }
-  ctx.restore();
+  g.restore();
+  g.strokeStyle = S.contorno || C.outline; g.lineWidth = Math.max(1.2, r * 0.045);   // contorno: contraste em toda zona
+  g.beginPath(); g.arc(0, 0, r, 0, 6.283); g.stroke();
+  if (S.brilho) drawSparkle(g, -r * 0.38, -r * 0.5, r * 0.2 * (0.6 + 0.4 * Math.sin(t * 3)));
 
-  ctx.fillStyle = C.fin;                                  // nadadeira lateral
-  ctx.beginPath(); ctx.ellipse(-r * 0.15, r * 0.22, r * 0.3, r * 0.17, 0.5 + wag * 0.6, 0, 6.283); ctx.fill();
+  const er = Math.max(4.5, r * 0.2), ex = r * 0.45, ey = -r * 0.25;
+  const f = { r, o, t, wag, er, ex, ey };
+  loja.desenharRoupas(g, look, f, 'corpo');
 
-  const er = Math.max(4.5, r * 0.2);                      // olho
-  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(r * 0.45, -r * 0.25, er, 0, 6.283); ctx.fill();
-  ctx.fillStyle = C.ink; ctx.beginPath(); ctx.arc(r * 0.45 + er * 0.25, -r * 0.25, er * 0.55, 0, 6.283); ctx.fill();
-  ctx.strokeStyle = C.ink; ctx.lineWidth = Math.max(1.5, r * 0.06); ctx.lineCap = 'round';  // boca
-  ctx.beginPath(); ctx.arc(r * 0.82, r * 0.12, Math.max(2, r * 0.09), 0, 6.283); ctx.stroke();
-  ctx.restore();
+  g.fillStyle = S.fin;                                    // nadadeira lateral
+  g.beginPath(); g.ellipse(-r * 0.15, r * 0.22, r * 0.3, r * 0.17, 0.5 + wag * 0.6, 0, 6.283); g.fill();
+
+  g.fillStyle = '#fff'; g.beginPath(); g.arc(ex, ey, er, 0, 6.283); g.fill();     // olho
+  g.fillStyle = C.ink; g.beginPath(); g.arc(ex + er * 0.25, ey, er * 0.55, 0, 6.283); g.fill();
+  g.strokeStyle = C.ink; g.lineWidth = Math.max(1.5, r * 0.06); g.lineCap = 'round';  // boca
+  g.beginPath(); g.arc(r * 0.82, r * 0.12, Math.max(2, r * 0.09), 0, 6.283); g.stroke();
+
+  loja.desenharRoupas(g, look, f, 'frente');
+  g.restore();
+}
+// Estrelinha de quatro pontas do baiacu dourado.
+function drawSparkle(g, x, y, s) {
+  g.fillStyle = 'rgba(255,255,240,.9)';
+  g.beginPath();
+  g.moveTo(x, y - s); g.quadraticCurveTo(x, y, x + s, y); g.quadraticCurveTo(x, y, x, y + s);
+  g.quadraticCurveTo(x, y, x - s, y); g.quadraticCurveTo(x, y, x, y - s);
+  g.fill();
 }
 
 function drawHud() {
@@ -551,16 +828,45 @@ function drawHud() {
   ctx.textAlign = 'center';
   ctx.fillStyle = 'rgba(6,34,54,.35)'; ctx.fillText(game.score, W / 2 + 2, 15);
   ctx.fillStyle = C.paper; ctx.fillText(game.score, W / 2, 12);
+  const skin = loja.visual(save.equipped).cor;
   for (let i = 0; i < CFG.LIVES; i++) {                    // vidas como pequenos baiacus
     const x = 30 + i * 30, y = 34, alive = i < game.lives;
     ctx.beginPath(); ctx.arc(x, y, 10, 0, 6.283);
-    if (alive) { ctx.fillStyle = C.body; ctx.fill(); ctx.fillStyle = C.ink; ctx.beginPath(); ctx.arc(x + 4, y - 3, 2, 0, 6.283); ctx.fill(); }
-    else { ctx.strokeStyle = 'rgba(255,247,227,.5)'; ctx.lineWidth = 2; ctx.stroke(); }
+    if (alive) {
+      ctx.fillStyle = skin.body; ctx.fill();
+      ctx.strokeStyle = skin.contorno || C.outline; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.fillStyle = C.ink; ctx.beginPath(); ctx.arc(x + 4, y - 3, 2, 0, 6.283); ctx.fill();
+    } else { ctx.strokeStyle = 'rgba(255,247,227,.5)'; ctx.lineWidth = 2; ctx.stroke(); }
   }
-  if (game.best > 0) {
-    ctx.font = '600 13px "Figtree", system-ui, sans-serif'; ctx.textAlign = 'left';
-    ctx.fillStyle = 'rgba(255,247,227,.8)'; ctx.fillText('Recorde ' + game.best, 20, 54);
+  drawCoin(ctx, 30, 64, 9);                               // saldo de moedas
+  ctx.font = '800 20px "Baloo 2", "Trebuchet MS", system-ui, sans-serif'; ctx.textAlign = 'left';
+  ctx.fillStyle = 'rgba(6,34,54,.35)'; ctx.fillText(save.coins, 46, 54);
+  ctx.fillStyle = C.paper; ctx.fillText(save.coins, 45, 52);
+  if (save.best > 0) {
+    ctx.font = '600 13px "Figtree", system-ui, sans-serif';
+    ctx.fillStyle = 'rgba(255,247,227,.8)'; ctx.fillText('Recorde ' + save.best, 20, 84);
   }
+}
+function drawCoin(g, x, y, r) {
+  g.fillStyle = C.coinDark; g.beginPath(); g.arc(x, y + 1.5, r, 0, 6.283); g.fill();
+  g.fillStyle = C.coin; g.beginPath(); g.arc(x, y, r, 0, 6.283); g.fill();
+  g.strokeStyle = C.coinDark; g.lineWidth = 1.5; g.beginPath(); g.arc(x, y, r * 0.62, 0, 6.283); g.stroke();
+}
+
+// Nome da zona numa etiqueta de papel abaixo do placar, entrando e saindo suavemente.
+function drawZoneName() {
+  if (zone.label <= 0) return;
+  const a = clamp(Math.min(zone.label, CFG.ZONE_LABEL - zone.label) / 0.3, 0, 1);
+  const name = ZONES[zone.idx].name;
+  ctx.save();
+  ctx.globalAlpha = a;
+  ctx.font = '800 22px "Baloo 2", "Trebuchet MS", system-ui, sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const w = ctx.measureText(name).width + 40, y = 70 + (1 - a) * -8;
+  ctx.fillStyle = 'rgba(6,34,54,.3)'; rr(W / 2 - w / 2, y + 4, w, 38, 19); ctx.fill();
+  ctx.fillStyle = C.paper; rr(W / 2 - w / 2, y, w, 38, 19); ctx.fill();
+  ctx.fillStyle = C.ink; ctx.fillText(name, W / 2, y + 21);
+  ctx.restore();
 }
 
 function render(t) {
@@ -576,11 +882,12 @@ function render(t) {
   drawCols();
   drawFloor();
   const blink = game.inv > 0 && Math.floor(t * 12) % 2 === 0;
-  const idle = game.state === 'start' || game.state === 'over';
+  const idle = game.state === 'start' || game.state === 'over' || game.state === 'shop';
   if (!blink) {
-    drawFish(fish.x, fish.y + (idle ? Math.sin(t * 1.6) * 10 : 0),
+    drawFish(ctx, fish.x, fish.y + (idle ? Math.sin(t * 1.6) * 10 : 0),
       idle ? lerp(CFG.R_MIN, CFG.R_MAX, 0.55 + Math.sin(t * 1.1) * 0.3) : fish.r,
-      idle ? 0.55 + Math.sin(t * 1.1) * 0.3 : input.open, t);
+      idle ? 0.55 + Math.sin(t * 1.1) * 0.3 : input.open, t,
+      clamp(fish.vy / 700, -0.3, 0.3), loja.visual(save.equipped));
   }
   for (const p of game.puffs) {
     ctx.globalAlpha = clamp(p.life * 2, 0, 1); ctx.fillStyle = p.color;
@@ -589,7 +896,8 @@ function render(t) {
   ctx.globalAlpha = 1;
   ctx.restore();
 
-  if (game.state !== 'start' && game.state !== 'tutorial') drawHud();
+  if (game.state !== 'start' && game.state !== 'tutorial' && game.state !== 'shop') drawHud();
+  if (game.state === 'playing' || game.state === 'countdown') drawZoneName();
   if (game.state === 'countdown') {
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.font = '800 150px "Baloo 2", "Trebuchet MS", system-ui, sans-serif';
@@ -612,12 +920,15 @@ function frame(now) {
   const camLost = input.mode === 'cam' && input.missing > CFG.HAND_LOST;
   switch (game.state) {
     case 'tutorial': updateTutorial(dt); break;
-    case 'countdown':
+    case 'countdown': {
       if (camLost) { pause('hand'); break; }
       fish.r = lerp(CFG.R_MIN, CFG.R_MAX, input.open);
+      const shown = Math.ceil(game.count);
       game.count -= dt;
       if (game.count <= 0) setState('playing');
+      else if (Math.ceil(game.count) < shown) som.tocar('bipe', Math.ceil(game.count));
       break;
+    }
     case 'playing':
       if (camLost) { pause('hand'); break; }
       stepFish(dt); stepWorld(dt);
@@ -627,14 +938,20 @@ function frame(now) {
       if (game.pauseReason === 'hand' && input.mode === 'cam' && input.seen > CFG.HAND_BACK) beginCountdown();
       break;
   }
+  som.tom(input.open, game.state === 'playing');
+  if (game.state !== 'paused') updateZone(dt);
   stepPuffs(dt);
   render(game.t);
+  if (game.state === 'shop') loja.animar(game.t);
   if (input.mode === 'cam') drawCam();
   requestAnimationFrame(frame);
 }
 
+loja.montar({ save, persist, drawFish });
 resize();
+updateZone(0);
+showSound();
 setState('start');
 requestAnimationFrame(frame);
-window.__baiacu = { game, input, fish, CFG };   // para depurar no console
+window.__baiacu = { game, input, fish, CFG, save, zone, ZONES, drawFish, loja };   // para depurar no console
 })();
