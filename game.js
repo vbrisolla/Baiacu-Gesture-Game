@@ -450,6 +450,7 @@ function setState(s) {
   $('startCoins').textContent = save.coins;
   $('pauseBtn').hidden = !(s === 'playing' || s === 'countdown');
   $('cam').hidden = input.mode !== 'cam';
+  showModeSwitch();
   updateQuiet();
 }
 function startGame() {
@@ -467,7 +468,6 @@ function pause(reason) {
     ? 'Mostre a mão para a câmera. O jogo volta sozinho, com uma contagem de 3 segundos.'
     : 'Seus pontos estão guardados. Continue quando quiser.';
   $('btnResume').hidden = hand;
-  $('btnToKeys').hidden = input.mode !== 'cam';
   setState('paused');
 }
 function gameOver() {
@@ -524,18 +524,44 @@ const CAM_ERRORS = {
   NoMediaDevices: 'Aqui dentro a câmera não pode ser usada. Abra o arquivo direto no Chrome ou no Edge, ou jogue com o teclado.',
   DetectorLoad: 'Não consegui baixar o detector de mão. Confira a internet e tente de novo.',
 };
-$('btnCam').addEventListener('click', async () => {
-  const st = $('startStatus'), btn = $('btnCam');
+/* ---------- troca de modo: câmera <-> teclado, a qualquer hora ---------- */
+/* Passa o controle para a mão. Na primeira vez liga a câmera e baixa o detector (mensagens em st);
+   depois ela já está pronta. Devolve 'nova', 'pronta' ou null se não deu. */
+async function useCamera(st, btn) {
+  if (landmarker) { input.mode = 'cam'; st.textContent = ''; return 'pronta'; }
   btn.disabled = true; st.classList.add('ok');
   try {
     await startCamera((msg) => { st.textContent = msg; });
     input.mode = 'cam'; st.textContent = '';
-    startTutorial();
+    return 'nova';
   } catch (err) {
     st.classList.remove('ok');
     st.textContent = CAM_ERRORS[err.name] || CAM_ERRORS.NoMediaDevices;
     console.warn('[baiacu] câmera indisponível:', err.name, err.cause || err.message);
+    return null;
   } finally { btn.disabled = false; }
+}
+function useKeys() { input.mode = 'keys'; input.target = input.open; }
+// Os botões de troca sempre oferecem o outro modo.
+function showModeSwitch() {
+  const cam = input.mode === 'cam';
+  $('btnToKeys').hidden = !cam;
+  $('btnToCam').hidden = cam;
+  $('btnSwitchOver').textContent = cam ? 'Jogar com o teclado' : 'Jogar com a câmera';
+  $('pauseStatus').textContent = ''; $('overStatus').textContent = '';
+}
+
+$('btnCam').addEventListener('click', async (e) => {
+  if (await useCamera($('startStatus'), e.currentTarget)) startTutorial();
+});
+$('btnToCam').addEventListener('click', async (e) => {
+  if (await useCamera($('pauseStatus'), e.currentTarget) && game.state === 'paused') beginCountdown();
+});
+$('btnSwitchOver').addEventListener('click', async (e) => {
+  if (input.mode === 'cam') { useKeys(); startGame(); return; }
+  const r = await useCamera($('overStatus'), e.currentTarget);
+  if (r === 'nova') startTutorial();   // primeira vez com a câmera: o tutorial calibra a mão
+  else if (r) startGame();
 });
 $('btnKeys').addEventListener('click', () => { input.mode = 'keys'; input.target = 0.5; startTutorial(); });
 $('tutSkip').addEventListener('click', startGame);
@@ -544,7 +570,7 @@ $('btnAgain').addEventListener('click', startGame);
 $('btnTutAgain').addEventListener('click', startTutorial);
 $('btnResume').addEventListener('click', beginCountdown);
 $('pauseBtn').addEventListener('click', () => pause('manual'));
-$('btnToKeys').addEventListener('click', () => { input.mode = 'keys'; input.target = input.open; beginCountdown(); });
+$('btnToKeys').addEventListener('click', () => { useKeys(); beginCountdown(); });
 $('btnShopStart').addEventListener('click', openShop);
 $('btnShopOver').addEventListener('click', openShop);
 $('shopBack').addEventListener('click', closeShop);

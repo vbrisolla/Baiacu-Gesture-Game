@@ -60,6 +60,8 @@ body {
 .status { font-size: 14.5px; font-weight: 600; color: #a13a1e; min-height: 1.45em; }
 .status.ok { color: var(--tinta-suave); }
 .row { display: flex; flex-wrap: wrap; gap: 10px; }
+.mode-switch { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-top: -6px; }
+#pauseStatus:empty, #overStatus:empty { display: none; }
 
 button {
   font: 600 16px/1 var(--texto);

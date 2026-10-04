@@ -99,7 +99,9 @@ No canto da tela aparece a prévia da câmera, com o **esqueleto da sua mão** d
 
 No teclado, o baiacu não infla de uma vez: leva uns **0,4 s** para ir de murcho a totalmente inflado, e o mesmo para murchar.
 
-> 🔄 Dá para trocar da câmera para o teclado **no meio da partida**, pelo botão *Trocar para o teclado* da tela de pausa.
+> 🔄 **Trocou de ideia?** Dá para mudar de modo a qualquer hora, nos dois sentidos:
+> - ⏸️ **Na pausa:** *Trocar para o teclado* ou *Trocar para a câmera*. A partida continua de onde parou.
+> - 💀 **No fim de jogo:** *Jogar com a câmera* ou *Jogar com o teclado* começa uma partida nova no outro modo. Na primeira vez que a câmera liga, o jogo passa pelo tutorial para calibrar a sua mão.
 
 > 🛍️ A **loja** é operada por mouse, toque ou teclado (`Tab`, `Enter`, setas entre as abas, `Esc` para voltar). Ela não usa a mão.
 
@@ -124,7 +126,7 @@ No teclado, o baiacu não infla de uma vez: leva uns **0,4 s** para ir de murcho
 2. 🎓 **Tutorial:** ensina os gestos passo a passo. Dá para pular.
 3. 3️⃣ **Contagem:** 3 segundos antes de o cenário andar. O nome da primeira zona aparece no alto.
 4. 🎮 **Jogando:** placar no centro; vidas, moedas e recorde à esquerda; *Pausar* à direita.
-5. 💀 **Fim de jogo:** pontos, recorde (com destaque quando é batido) e o resumo das moedas. Daqui você joga de novo, revê o tutorial ou vai à loja.
+5. 💀 **Fim de jogo:** pontos, recorde (com destaque quando é batido) e o resumo das moedas. Daqui você joga de novo, revê o tutorial, vai à loja ou troca entre câmera e teclado.
 
 🔊 O botão de som fica **sempre** no canto inferior esquerdo, em qualquer tela.
 
