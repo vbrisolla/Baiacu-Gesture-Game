@@ -71,6 +71,13 @@ body {
 .pills input:checked + span { background: var(--tinta); color: var(--papel); box-shadow: none; }
 .pills input:checked + span small { color: rgba(255,247,227,.75); }
 .pills input:focus-visible + span { outline: 3px solid var(--foco); outline-offset: 3px; }
+.switch { position: relative; display: inline-flex; align-items: center; gap: 10px; cursor: pointer; font-weight: 600; align-self: flex-start; }
+.switch input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.switch .track { flex: none; position: relative; width: 40px; height: 24px; border-radius: 999px; box-shadow: inset 0 0 0 2px #e4d6b3; transition: background .15s; }
+.switch .track::after { content: ''; position: absolute; top: 4px; left: 4px; width: 16px; height: 16px; border-radius: 50%; background: #e4d6b3; transition: transform .15s, background .15s; }
+.switch input:checked + .track { background: var(--tinta); box-shadow: none; }
+.switch input:checked + .track::after { transform: translateX(16px); background: var(--papel); }
+.switch input:focus-visible + .track { outline: 3px solid var(--foco); outline-offset: 3px; }
 .mode-switch { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-top: -6px; }
 #pauseStatus:empty, #overStatus:empty { display: none; }
 

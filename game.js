@@ -83,6 +83,7 @@ const SAVE_KEY = 'baiacu:v1';
 const saveDefaults = () => ({
   best: 0, coins: 0, sound: true,
   hard: false, heightHand: 'dir',   // modo difícil e qual mão da pessoa controla a altura ('esq' | 'dir')
+  tutorial: true,                   // passa pelo tutorial antes de cada partida iniciada no menu
   owned: ['amarelo'],
   equipped: { cor: 'amarelo', cabeca: null, rosto: null, pescoco: null },
 });
@@ -97,6 +98,7 @@ function loadSave() {
   s.coins = nonNegInt(data.coins);
   if (typeof data.sound === 'boolean') s.sound = data.sound;
   if (typeof data.hard === 'boolean') s.hard = data.hard;
+  if (typeof data.tutorial === 'boolean') s.tutorial = data.tutorial;
   if (data.heightHand === 'esq' || data.heightHand === 'dir') s.heightHand = data.heightHand;
   if (Array.isArray(data.owned)) {
     s.owned = [...new Set([...s.owned, ...data.owned.filter((id) => typeof id === 'string')])];
@@ -636,8 +638,10 @@ function showModeSwitch() {
   $('pauseStatus').textContent = ''; $('overStatus').textContent = '';
 }
 
+// Vindo do menu: tutorial ou direto para a partida, conforme o switch.
+const play = () => (save.tutorial ? startTutorial() : startGame());
 $('btnCam').addEventListener('click', async (e) => {
-  if (await useCamera($('startStatus'), e.currentTarget)) startTutorial();
+  if (await useCamera($('startStatus'), e.currentTarget)) play();
 });
 $('btnToCam').addEventListener('click', async (e) => {
   if (await useCamera($('pauseStatus'), e.currentTarget) && game.state === 'paused') beginCountdown();
@@ -645,10 +649,12 @@ $('btnToCam').addEventListener('click', async (e) => {
 $('btnSwitchOver').addEventListener('click', async (e) => {
   if (input.mode === 'cam') { useKeys(); startGame(); return; }
   const r = await useCamera($('overStatus'), e.currentTarget);
-  if (r === 'nova') startTutorial();   // primeira vez com a câmera: o tutorial calibra a mão
+  if (r === 'nova') play();   // primeira vez com a câmera: o tutorial (se ligado) calibra a mão
   else if (r) startGame();
 });
-$('btnKeys').addEventListener('click', () => { useKeys(); input.target = 0.5; startTutorial(); });
+$('btnKeys').addEventListener('click', () => { useKeys(); input.target = 0.5; play(); });
+$('tutToggle').checked = save.tutorial;
+$('tutToggle').addEventListener('change', (e) => { save.tutorial = e.currentTarget.checked; persist(); });
 $('btnModeOver').addEventListener('click', () => { setState('start'); $('btnCam').focus(); });
 
 /* ---------- escolha do modo na tela inicial (fica salva) ---------- */
