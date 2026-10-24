@@ -11,7 +11,7 @@
 <body>
 <div id="stage">
   <canvas id="game" aria-label="Jogo Baiacu"></canvas>
-
+ta 
   <button id="pauseBtn" hidden aria-label="Pausar">Pausar</button>
 
   <button id="soundBtn" aria-pressed="true" aria-label="Desligar o som">
@@ -31,7 +31,8 @@
       <video id="video" playsinline muted></video>
       <canvas id="camOverlay" width="380" height="285"></canvas>
     </div>
-    <div id="camInfo"><span>Abertura</span><div class="bar"><i id="camBar"></i></div><span id="camPct">0%</span></div>
+    <div class="cam-info"><span>Abertura</span><div class="bar"><i id="camBar"></i></div><span id="camPct">0%</span></div>
+    <div class="cam-info alt" id="camInfoY" hidden><span>Altura</span><div class="bar"><i id="camBarY"></i></div><span id="camPctY">0%</span></div>
   </div>
 
   <section id="tutorial" hidden aria-live="polite">
@@ -61,11 +62,27 @@
   <section class="screen" id="screenStart">
     <div class="card">
       <h1>Baiacu</h1>
-      <p class="lede">Abra a mão na frente da câmera para inflar e subir. Feche para murchar e afundar.</p>
+      <p class="lede" id="startLede">Abra a mão na frente da câmera para inflar e subir. Feche para murchar e afundar.</p>
+      <fieldset class="pick">
+        <legend>Modo</legend>
+        <div class="pills">
+          <label><input type="radio" name="modo" value="normal" checked><span>Normal <small>uma mão</small></span></label>
+          <label><input type="radio" name="modo" value="dificil"><span>Difícil <small>duas mãos</small></span></label>
+        </div>
+      </fieldset>
+      <fieldset class="pick" id="pickHand" hidden>
+        <legend>Mão que controla a altura</legend>
+        <div class="pills">
+          <label><input type="radio" name="altura" value="esq"><span>Esquerda</span></label>
+          <label><input type="radio" name="altura" value="dir" checked><span>Direita</span></label>
+        </div>
+        <p class="fine" id="pickHandNote"></p>
+      </fieldset>
       <div class="row">
         <button class="primary" id="btnCam">Jogar com a câmera</button>
         <button id="btnKeys">Jogar com o teclado</button>
       </div>
+      <p class="fine" id="hardKeysNote" hidden>O modo difícil é só com a câmera.</p>
       <button class="shop-open" id="btnShopStart">Loja <span class="wallet"><i class="coin" aria-hidden="true"></i><b id="startCoins">0</b> moedas</span></button>
       <p class="status" id="startStatus" role="status"></p>
       <p class="fine">O vídeo é analisado só no seu navegador. Nada é gravado nem enviado.</p>
@@ -80,6 +97,10 @@
         <button class="primary" id="btnResume">Continuar</button>
         <button id="btnToKeys">Trocar para o teclado</button>
         <button id="btnToCam" hidden>Trocar para a câmera</button>
+      </div>
+      <div class="mode-switch">
+        <button class="link" id="btnRestart">Reiniciar partida</button>
+        <button class="link" id="btnMenu">Voltar ao menu principal</button>
       </div>
       <p class="status" id="pauseStatus" role="status"></p>
     </div>
@@ -105,6 +126,7 @@
       </div>
       <div class="mode-switch">
         <button class="link" id="btnSwitchOver">Jogar com a câmera</button>
+        <button class="link" id="btnModeOver">Modo normal: mudar</button>
         <p class="status" id="overStatus" role="status"></p>
       </div>
     </div>

@@ -60,6 +60,17 @@ body {
 .status { font-size: 14.5px; font-weight: 600; color: #a13a1e; min-height: 1.45em; }
 .status.ok { color: var(--tinta-suave); }
 .row { display: flex; flex-wrap: wrap; gap: 10px; }
+/* ---------- escolha do modo ---------- */
+.pick { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.pick legend { padding: 0; margin-bottom: 6px; font: 600 12px var(--texto); letter-spacing: .08em; text-transform: uppercase; color: var(--tinta-suave); }
+.pills { display: flex; flex-wrap: wrap; gap: 8px; }
+.pills label { position: relative; cursor: pointer; }
+.pills input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.pills span { display: inline-block; padding: 10px 16px; border-radius: 999px; font-weight: 600; box-shadow: inset 0 0 0 2px #e4d6b3; }
+.pills small { font-weight: 400; color: var(--tinta-suave); }
+.pills input:checked + span { background: var(--tinta); color: var(--papel); box-shadow: none; }
+.pills input:checked + span small { color: rgba(255,247,227,.75); }
+.pills input:focus-visible + span { outline: 3px solid var(--foco); outline-offset: 3px; }
 .mode-switch { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-top: -6px; }
 #pauseStatus:empty, #overStatus:empty { display: none; }
 
@@ -123,14 +134,15 @@ button:focus-visible { outline: 3px solid var(--foco); outline-offset: 3px; }
   position: absolute; inset: 0; width: 100%; height: 100%;
   object-fit: cover; transform: scaleX(-1);
 }
-#camInfo {
+#cam .cam-info {
   display: flex; align-items: center; gap: 8px;
   font: 600 12px var(--texto); color: var(--papel);
   background: rgba(6, 34, 54, .78); border-radius: 99px; padding: 5px 10px;
 }
-#camInfo .bar { flex: 1; height: 8px; background: rgba(255,247,227,.3); }
-#camInfo .bar i { background: var(--baiacu); }
-#camPct { min-width: 4ch; text-align: right; font-variant-numeric: tabular-nums; }
+#cam .cam-info .bar { flex: 1; height: 8px; background: rgba(255,247,227,.3); }
+#cam .cam-info .bar i { background: var(--baiacu); }
+#cam .cam-info.alt .bar i { background: #7fd6ff; }   /* mesma cor do esqueleto da mão da altura */
+#camPct, #camPctY { min-width: 4ch; text-align: right; font-variant-numeric: tabular-nums; }
 
 #pauseBtn {
   position: absolute; right: 16px; top: 16px;

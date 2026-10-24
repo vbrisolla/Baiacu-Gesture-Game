@@ -85,6 +85,17 @@ No canto da tela aparece a prévia da câmera, com o **esqueleto da sua mão** d
 
 > 💡 Deixe a mão inteira visível, a uns **dois palmos** da tela, com a palma virada para a câmera e boa iluminação.
 
+### 🙌 Modo difícil (duas mãos)
+
+Na tela inicial, escolha **Modo: Difícil** e qual mão controla a **altura**. A outra controla o **tamanho**. A escolha fica salva.
+
+| Mão | O que faz |
+|---|---|
+| 🔵 Mão da altura | Subir ou descer a mão leva o baiacu junto. Não importa se está aberta ou fechada. |
+| 🟡 Mão do tamanho | Abrir infla, fechar murcha. **Não move** o baiacu. |
+
+Tamanho e movimento ficam separados: dá para subir murcho ou descer inflado, mas é preciso coordenar as duas mãos ao mesmo tempo. Na prévia da câmera cada mão aparece na sua cor, com uma barra de **Abertura** e outra de **Altura**. Se uma das duas sair da câmera, o jogo pausa. O modo difícil é só com a câmera; no teclado vale sempre o controle normal. Para trocar depois de uma partida, use *Modo: mudar* no fim de jogo.
+
 ### ⌨️ Com teclado, mouse ou toque
 
 | Tecla / ação | O que faz |
@@ -353,6 +364,7 @@ São **4 passos com a câmera** e **3 com o teclado**. Cada um tem uma barra que
 
 - 📉 Nos passos 1 a 3, se você sai do gesto, a barra **esvazia aos poucos**. No passo 4 ela só para, sem perder o progresso.
 - 👀 Se a mão some por mais de 0,6 s, aparece um aviso pedindo para trazê-la de volta.
+- 🙌 No **modo difícil** são 6 passos: mostrar as duas mãos, abrir e fechar a mão do tamanho, levantar e abaixar a mão da altura e, por fim, deixar o baiacu pequeno na faixa clara.
 
 ### 🎯 Calibração automática
 
@@ -384,7 +396,7 @@ Pontos e vidas ficam guardados durante a pausa, e o som fica mudo. 💾🔇
 📷 Webcam ──► 🧠 MediaPipe (21 pontos da mão em 3D) ──► 📐 razão dedos/palma ──► 🎚️ abertura 0..1 ──► 🐡
 ```
 
-1. 📷 O vídeo da webcam (640×480 de preferência, câmera frontal) vai quadro a quadro para o **MediaPipe Hand Landmarker**, rodando **no seu navegador**. Ele tenta usar a GPU e, se não der, usa a CPU. Só uma mão é rastreada.
+1. 📷 O vídeo da webcam (640×480 de preferência, câmera frontal) vai quadro a quadro para o **MediaPipe Hand Landmarker**, rodando **no seu navegador**. Ele tenta usar a GPU e, se não der, usa a CPU. Só uma mão é rastreada (duas no modo difícil, separadas pelo lado da imagem em que estão).
 2. 🦴 O detector devolve **21 pontos da mão** em coordenadas 3D reais.
 3. 📐 O jogo calcula a **razão de abertura**: distância média das pontas do indicador, médio, anelar e mínimo até o pulso, dividida pelo tamanho da palma (pulso até a base do dedo médio).
    - ✊ Mão fechada: perto de **0,8 a 1,0**.
@@ -492,6 +504,9 @@ Todo valor ajustável fica numa tabela no topo do arquivo dele.
 | `ZONE_LABEL` | 2 | Segundos com o nome da zona na tela |
 | `COINS_PER_PEARL` | 1 | Moedas por pérola |
 | `COINS_PER_POINT` | 0.5 | Moedas por ponto no fim da partida (arredondado para baixo) |
+| `HARD_Y` | [0.2, 0.8] | Modo difícil: faixa vertical da mão da altura no quadro (topo → fundo) |
+| `HARD_FOLLOW` | 7 | Modo difícil: quão forte o baiacu persegue a mão |
+| `HARD_V_MAX` | 330 | Modo difícil: velocidade vertical máxima (px/s) |
 
 ### Outras tabelas
 

@@ -26,6 +26,10 @@ const CFG = {
   ZONE_LABEL: 2,               // segundos com o nome da zona na tela
   COINS_PER_PEARL: 1,          // moedas por pérola, na hora
   COINS_PER_POINT: 0.5,        // no fim da partida: floor(pontos * 0.5), ou seja, 10 pontos = 5 moedas
+  // Modo difícil (duas mãos): uma mão define a altura pela posição no quadro, a outra o tamanho.
+  HARD_Y: [0.2, 0.8],          // faixa vertical da mão da altura no quadro (topo..fundo do mar)
+  HARD_FOLLOW: 7,              // quão forte o baiacu persegue a altura da mão
+  HARD_V_MAX: 330,             // velocidade vertical máxima no modo difícil (px/s)
 };
 const MP_VERSION = '0.10.14';
 const MP_BASE = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VERSION}`;
@@ -33,6 +37,7 @@ const MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/hand_landmark
 
 const C = {
   hand: '#f4c653',                                        // esqueleto da mão na prévia da câmera
+  handY: '#7fd6ff',                                       // modo difícil: a mão da altura
   ink: '#0a2a40', paper: '#fff7e3', pearl: '#fff3d6', outline: 'rgba(10,42,64,.4)',
   coin: '#f5c542', coinDark: '#b8860b',
 };
@@ -77,6 +82,7 @@ const loja = window.BaiacuLoja;   // loja.js
 const SAVE_KEY = 'baiacu:v1';
 const saveDefaults = () => ({
   best: 0, coins: 0, sound: true,
+  hard: false, heightHand: 'dir',   // modo difícil e qual mão da pessoa controla a altura ('esq' | 'dir')
   owned: ['amarelo'],
   equipped: { cor: 'amarelo', cabeca: null, rosto: null, pescoco: null },
 });
@@ -90,6 +96,8 @@ function loadSave() {
   s.best = nonNegInt(data.best);
   s.coins = nonNegInt(data.coins);
   if (typeof data.sound === 'boolean') s.sound = data.sound;
+  if (typeof data.hard === 'boolean') s.hard = data.hard;
+  if (data.heightHand === 'esq' || data.heightHand === 'dir') s.heightHand = data.heightHand;
   if (Array.isArray(data.owned)) {
     s.owned = [...new Set([...s.owned, ...data.owned.filter((id) => typeof id === 'string')])];
   }
@@ -136,10 +144,16 @@ const input = {
   raw: 0, rawS: 1.4,   // razão dedos/palma, bruta e suavizada
   lo: CFG.RATIO_LO, hi: CFG.RATIO_HI,
   target: 0.5, open: 0.5,
-  held: false, lm: null,
+  yTarget: 0.5, y: 0.5, // modo difícil: altura da mão no quadro (0 = topo, 1 = fundo)
+  held: false, hands: [], // mãos vistas neste quadro, para desenhar: { lm, color }
 };
+// O modo difícil só existe com a câmera; no teclado vale sempre o controle normal.
+const hardOn = () => input.mode === 'cam' && save.hard;
+const HAND_NAME = { esq: 'esquerda', dir: 'direita' };
+const heightName = () => HAND_NAME[save.heightHand];
+const sizeName = () => HAND_NAME[save.heightHand === 'dir' ? 'esq' : 'dir'];
 const video = $('video'), camOverlay = $('camOverlay'), camCtx = camOverlay.getContext('2d');
-let landmarker = null, lastVideoTime = -1;
+let landmarker = null, lastVideoTime = -1, numHands = 1;
 
 const dist3 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, (a.z || 0) - (b.z || 0));
 /* Razão entre a distância média das pontas dos dedos ao pulso e o tamanho da palma.
@@ -167,10 +181,11 @@ async function startCamera(onStatus) {
     const fileset = await FilesetResolver.forVisionTasks(`${MP_BASE}/wasm`);
     const make = (delegate) => HandLandmarker.createFromOptions(fileset, {
       baseOptions: { modelAssetPath: MODEL_URL, delegate },
-      runningMode: 'VIDEO', numHands: 1,
+      runningMode: 'VIDEO', numHands: save.hard ? 2 : 1,
       minHandDetectionConfidence: 0.5, minHandPresenceConfidence: 0.5, minTrackingConfidence: 0.5,
     });
     try { landmarker = await make('GPU'); } catch (_) { landmarker = await make('CPU'); }
+    numHands = save.hard ? 2 : 1;
   } catch (err) {
     stream.getTracks().forEach((t) => t.stop());
     video.srcObject = null;
@@ -178,20 +193,51 @@ async function startCamera(onStatus) {
   }
 }
 
+// Detecta 1 mão no modo normal e 2 no difícil. Trocar o número custa pouco depois que o detector existe.
+async function syncHands() {
+  const n = save.hard ? 2 : 1;
+  if (!landmarker || n === numHands) return;
+  try { await landmarker.setOptions({ numHands: n }); numHands = n; } catch (_) { /* fica com o que tinha */ }
+}
+
+function readSize(wl) {
+  input.raw = handRatio(wl);
+  input.rawS += (input.raw - input.rawS) * 0.35;
+  input.target = clamp((input.raw - input.lo) / (input.hi - input.lo), 0, 1);
+}
+
 function detect(now) {
   if (!landmarker || video.readyState < 2 || video.currentTime === lastVideoTime) return;
   lastVideoTime = video.currentTime;
   let res;
   try { res = landmarker.detectForVideo(video, now); } catch (_) { return; }
-  const lm = res && res.landmarks && res.landmarks[0];
-  const wl = res && res.worldLandmarks && res.worldLandmarks[0];
-  if (lm && wl) {
-    input.present = true; input.lm = lm;
-    input.raw = handRatio(wl);
-    input.rawS += (input.raw - input.rawS) * 0.35;
-    input.target = clamp((input.raw - input.lo) / (input.hi - input.lo), 0, 1);
-  } else {
-    input.present = false; input.lm = null;
+  const found = ((res && res.landmarks) || [])
+    .map((lm, i) => ({ lm, wl: res.worldLandmarks && res.worldLandmarks[i] }))
+    .filter((h) => h.lm && h.wl);
+  if (!hardOn()) {
+    const h = found[0];
+    input.present = !!h;
+    input.hands = h ? [{ lm: h.lm, color: C.hand }] : [];
+    if (h) readSize(h.wl);
+    return;
+  }
+  /* Duas mãos. A imagem da câmera não é espelhada: a mão direita da pessoa aparece do lado esquerdo
+     (x menor). Separar pela posição é mais estável que o rótulo de lateralidade do detector. */
+  const mine = { esq: null, dir: null };
+  if (found.length >= 2) {
+    found.sort((a, b) => a.lm[0].x - b.lm[0].x);
+    mine.dir = found[0]; mine.esq = found[1];
+  } else if (found.length === 1) {
+    mine[found[0].lm[0].x < 0.5 ? 'dir' : 'esq'] = found[0];
+  }
+  const hY = mine[save.heightHand], hS = mine[save.heightHand === 'dir' ? 'esq' : 'dir'];
+  input.present = !!(hY && hS);
+  input.hands = [];
+  if (hS) { readSize(hS.wl); input.hands.push({ lm: hS.lm, color: C.hand }); }
+  if (hY) {
+    const y = (hY.lm[0].y + hY.lm[9].y) / 2;              // meio da palma
+    input.yTarget = clamp((y - CFG.HARD_Y[0]) / (CFG.HARD_Y[1] - CFG.HARD_Y[0]), 0, 1);
+    input.hands.push({ lm: hY.lm, color: C.handY });
   }
 }
 
@@ -201,6 +247,7 @@ function updateInput(dt, now) {
     if (input.present) { input.seen += dt; input.missing = 0; }
     else { input.missing += dt; input.seen = 0; }
     input.open += (input.target - input.open) * (1 - Math.exp(-dt * CFG.SMOOTH_CAM));
+    input.y += (input.yTarget - input.y) * (1 - Math.exp(-dt * CFG.SMOOTH_CAM));
   } else {
     input.present = true; input.seen = 9; input.missing = 0;
     input.target = clamp(input.target + (input.held ? 1 : -1) * 2.4 * dt, 0, 1);
@@ -218,16 +265,25 @@ function drawCam() {
   const pct = Math.round(input.open * 100);
   $('camBar').style.width = pct + '%';
   $('camPct').textContent = pct + '%';
-  if (!input.lm) return;
-  camCtx.lineWidth = 4; camCtx.lineCap = 'round'; camCtx.strokeStyle = C.hand;
-  camCtx.beginPath();
-  for (const [a, b] of BONES) {
-    camCtx.moveTo(input.lm[a].x * w, input.lm[a].y * h);
-    camCtx.lineTo(input.lm[b].x * w, input.lm[b].y * h);
+  const hard = hardOn();
+  $('camInfoY').hidden = !hard;
+  if (hard) {
+    const up = Math.round((1 - input.y) * 100);
+    $('camBarY').style.width = up + '%';
+    $('camPctY').textContent = up + '%';
   }
-  camCtx.stroke();
-  camCtx.fillStyle = C.paper;
-  for (const p of input.lm) { camCtx.beginPath(); camCtx.arc(p.x * w, p.y * h, 4.5, 0, 6.283); camCtx.fill(); }
+  camCtx.lineWidth = 4; camCtx.lineCap = 'round';
+  for (const { lm, color } of input.hands) {
+    camCtx.strokeStyle = color;
+    camCtx.beginPath();
+    for (const [a, b] of BONES) {
+      camCtx.moveTo(lm[a].x * w, lm[a].y * h);
+      camCtx.lineTo(lm[b].x * w, lm[b].y * h);
+    }
+    camCtx.stroke();
+    camCtx.fillStyle = C.paper;
+    for (const p of lm) { camCtx.beginPath(); camCtx.arc(p.x * w, p.y * h, 4.5, 0, 6.283); camCtx.fill(); }
+  }
 }
 
 /* ============================================================
@@ -270,12 +326,17 @@ function spawnCol(x) {
 function stepFish(dt) {
   const o = input.open;
   fish.r = lerp(CFG.R_MIN, CFG.R_MAX, o);
-  let d = o - 0.5;
-  d = Math.abs(d) < CFG.DEAD ? 0 : (d - Math.sign(d) * CFG.DEAD) / (0.5 - CFG.DEAD);
-  const vyTarget = -d * CFG.V_MAX;                     // aberta sobe, fechada desce
+  const top = 26 + fish.r * 0.5, bot = CFG.FLOOR - fish.r * 0.8;
+  let vyTarget;
+  if (hardOn()) {                                      // difícil: o baiacu persegue a altura da outra mão
+    vyTarget = clamp((lerp(top, bot, input.y) - fish.y) * CFG.HARD_FOLLOW, -CFG.HARD_V_MAX, CFG.HARD_V_MAX);
+  } else {
+    let d = o - 0.5;
+    d = Math.abs(d) < CFG.DEAD ? 0 : (d - Math.sign(d) * CFG.DEAD) / (0.5 - CFG.DEAD);
+    vyTarget = -d * CFG.V_MAX;                         // aberta sobe, fechada desce
+  }
   fish.vy += (vyTarget - fish.vy) * Math.min(1, CFG.V_RESP * dt);
   fish.y += fish.vy * dt;
-  const top = 26 + fish.r * 0.5, bot = CFG.FLOOR - fish.r * 0.8;
   if (fish.y < top) { fish.y = top; fish.vy = Math.max(0, fish.vy); }
   if (fish.y > bot) { fish.y = bot; fish.vy = Math.min(0, fish.vy); }
 }
@@ -385,10 +446,30 @@ const STEPS = [
     keys: ['Dê toques curtos na barra', 'Mantenha o baiacu dentro da faixa clara. Nesse tamanho ele passa nas fendas estreitas.'],
     ok: () => Math.abs(fish.y - CFG.H / 2) < BAND - fish.r * 0.3 },
 ];
+// Modo difícil: os textos dependem de qual mão faz o quê, então a lista é montada na hora.
+const hardSteps = () => [
+  { id: 'show', need: 1.0, title: 'Mostre as duas mãos',
+    hint: `A mão ${heightName()} (azul na prévia) leva o baiacu para cima e para baixo. A ${sizeName()} (amarela) infla e murcha.`,
+    ok: () => input.present },
+  { id: 'open', need: 1.2, title: `Abra bem a mão ${sizeName()}`,
+    hint: 'O baiacu infla, mas agora não sobe sozinho.', ok: () => input.open > 0.7 },
+  { id: 'close', need: 1.2, title: `Agora feche a mão ${sizeName()}`,
+    hint: 'Ele murcha.', ok: () => input.open < 0.3 },
+  { id: 'up', need: 1.0, title: `Levante a mão ${heightName()}`,
+    hint: 'O baiacu vai junto para cima.', ok: () => input.y < 0.15 },
+  { id: 'down', need: 1.0, title: `Agora abaixe a mão ${heightName()}`,
+    hint: 'E ele desce.', ok: () => input.y > 0.85 },
+  { id: 'hover', need: 2.0, keep: true, title: 'Pequeno e na faixa clara',
+    hint: `Use a mão ${heightName()} para ficar na faixa e feche um pouco a ${sizeName()}. É assim que se passa nas fendas.`,
+    ok: () => input.open < 0.5 && Math.abs(fish.y - CFG.H / 2) < BAND - fish.r * 0.3 },
+];
 const tut = { list: [], i: 0, prog: 0, stuck: 0, maxRaw: 0, minRaw: 9 };
 
 function startTutorial() {
-  tut.list = STEPS.filter((s) => input.mode === 'cam' || s.id !== 'show');
+  tut.list = hardOn() ? hardSteps() : STEPS.filter((s) => input.mode === 'cam' || s.id !== 'show');
+  $('tutWarn').textContent = hardOn()
+    ? 'Não estou vendo as duas mãos. Deixe as duas na frente da câmera.'
+    : 'Não estou vendo a mão. Traga ela de volta para a frente da câmera.';
   tut.i = 0; tut.prog = 0; tut.stuck = 0; tut.maxRaw = 0; tut.minRaw = 9;
   resetRun();
   setState('tutorial');
@@ -400,6 +481,8 @@ function showTutStep() {
   $('tutBarWrap').hidden = final; $('tutGo').hidden = !final;
   $('tutSkip').hidden = final;
   $('tutPauseTip').hidden = input.mode !== 'cam';
+  $('tutPauseTip').textContent = hardOn() ? 'Se uma das mãos sair da câmera, o jogo pausa sozinho.'
+    : 'Se a mão sair da câmera, o jogo pausa sozinho.';
   if (final) return;
   const k = input.mode === 'keys' && s.keys;
   $('tutStep').textContent = `Passo ${tut.i + 1} de ${tut.list.length}`;
@@ -463,9 +546,9 @@ function pause(reason) {
   if (game.state !== 'playing' && game.state !== 'countdown') return;
   game.pauseReason = reason;
   const hand = reason === 'hand';
-  $('pauseTitle').textContent = hand ? 'Cadê a mão?' : 'Jogo pausado';
+  $('pauseTitle').textContent = hand ? (hardOn() ? 'Cadê as mãos?' : 'Cadê a mão?') : 'Jogo pausado';
   $('pauseText').textContent = hand
-    ? 'Mostre a mão para a câmera. O jogo volta sozinho, com uma contagem de 3 segundos.'
+    ? `Mostre ${hardOn() ? 'as duas mãos' : 'a mão'} para a câmera. O jogo volta sozinho, com uma contagem de 3 segundos.`
     : 'Seus pontos estão guardados. Continue quando quiser.';
   $('btnResume').hidden = hand;
   setState('paused');
@@ -528,10 +611,11 @@ const CAM_ERRORS = {
 /* Passa o controle para a mão. Na primeira vez liga a câmera e baixa o detector (mensagens em st);
    depois ela já está pronta. Devolve 'nova', 'pronta' ou null se não deu. */
 async function useCamera(st, btn) {
-  if (landmarker) { input.mode = 'cam'; st.textContent = ''; return 'pronta'; }
+  if (landmarker) { await syncHands(); input.mode = 'cam'; st.textContent = ''; return 'pronta'; }
   btn.disabled = true; st.classList.add('ok');
   try {
     await startCamera((msg) => { st.textContent = msg; });
+    await syncHands();   // caso o modo tenha mudado enquanto o detector baixava
     input.mode = 'cam'; st.textContent = '';
     return 'nova';
   } catch (err) {
@@ -541,13 +625,14 @@ async function useCamera(st, btn) {
     return null;
   } finally { btn.disabled = false; }
 }
-function useKeys() { input.mode = 'keys'; input.target = input.open; }
+function useKeys() { input.mode = 'keys'; input.target = input.open; input.hands = []; }
 // Os botões de troca sempre oferecem o outro modo.
 function showModeSwitch() {
   const cam = input.mode === 'cam';
   $('btnToKeys').hidden = !cam;
   $('btnToCam').hidden = cam;
   $('btnSwitchOver').textContent = cam ? 'Jogar com o teclado' : 'Jogar com a câmera';
+  $('btnModeOver').textContent = save.hard ? 'Modo difícil: mudar' : 'Modo normal: mudar';
   $('pauseStatus').textContent = ''; $('overStatus').textContent = '';
 }
 
@@ -563,7 +648,28 @@ $('btnSwitchOver').addEventListener('click', async (e) => {
   if (r === 'nova') startTutorial();   // primeira vez com a câmera: o tutorial calibra a mão
   else if (r) startGame();
 });
-$('btnKeys').addEventListener('click', () => { input.mode = 'keys'; input.target = 0.5; startTutorial(); });
+$('btnKeys').addEventListener('click', () => { useKeys(); input.target = 0.5; startTutorial(); });
+$('btnModeOver').addEventListener('click', () => { setState('start'); $('btnCam').focus(); });
+
+/* ---------- escolha do modo na tela inicial (fica salva) ---------- */
+function showModePick() {
+  const hard = save.hard, alt = heightName(), tam = sizeName();
+  document.querySelector(`input[name="modo"][value="${hard ? 'dificil' : 'normal'}"]`).checked = true;
+  document.querySelector(`input[name="altura"][value="${save.heightHand}"]`).checked = true;
+  $('pickHand').hidden = !hard;
+  $('pickHandNote').textContent = `A mão ${tam} abre e fecha para inflar e murchar.`;
+  $('startLede').textContent = hard
+    ? `Duas mãos: a ${alt} leva o baiacu para cima e para baixo, a ${tam} abre para inflar e fecha para murchar.`
+    : 'Abra a mão na frente da câmera para inflar e subir. Feche para murchar e afundar.';
+  $('btnKeys').hidden = hard;
+  $('hardKeysNote').hidden = !hard;
+}
+document.querySelectorAll('input[name="modo"]').forEach((r) => r.addEventListener('change', () => {
+  save.hard = r.value === 'dificil'; persist(); showModePick(); showModeSwitch();
+}));
+document.querySelectorAll('input[name="altura"]').forEach((r) => r.addEventListener('change', () => {
+  save.heightHand = r.value; persist(); showModePick();
+}));
 $('tutSkip').addEventListener('click', startGame);
 $('tutGo').addEventListener('click', startGame);
 $('btnAgain').addEventListener('click', startGame);
@@ -571,6 +677,9 @@ $('btnTutAgain').addEventListener('click', startTutorial);
 $('btnResume').addEventListener('click', beginCountdown);
 $('pauseBtn').addEventListener('click', () => pause('manual'));
 $('btnToKeys').addEventListener('click', () => { useKeys(); beginCountdown(); });
+// Abandonar a partida: as moedas das pérolas já ficaram; os pontos dela não contam para recorde nem moedas.
+$('btnRestart').addEventListener('click', startGame);
+$('btnMenu').addEventListener('click', () => { resetRun(); setState('start'); $('btnCam').focus(); });
 $('btnShopStart').addEventListener('click', openShop);
 $('btnShopOver').addEventListener('click', openShop);
 $('shopBack').addEventListener('click', closeShop);
@@ -583,6 +692,7 @@ const HOLD_KEYS = new Set(['Space', 'ArrowUp', 'KeyW']);
 addEventListener('keydown', (e) => {
   if (HOLD_KEYS.has(e.code)) {
     if (e.target instanceof HTMLButtonElement && e.code === 'Space') return; // deixa o botão focado responder
+    if (e.target instanceof HTMLInputElement) return;                        // e as opções de modo (espaço e setas)
     input.held = true; e.preventDefault();
   }
   if (e.code === 'Enter' && !(e.target instanceof HTMLButtonElement)) {
@@ -977,6 +1087,7 @@ loja.montar({ save, persist, drawFish });
 resize();
 updateZone(0);
 showSound();
+showModePick();
 setState('start');
 requestAnimationFrame(frame);
 window.__baiacu = { game, input, fish, CFG, save, zone, ZONES, drawFish, loja };   // para depurar no console
