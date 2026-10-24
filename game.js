@@ -30,6 +30,15 @@ const CFG = {
   HARD_Y: [0.2, 0.8],          // faixa vertical da mão da altura no quadro (topo..fundo do mar)
   HARD_FOLLOW: 7,              // quão forte o baiacu persegue a altura da mão
   HARD_V_MAX: 330,             // velocidade vertical máxima no modo difícil (px/s)
+  // Perigos do modo difícil: cada um entra quando a partida chega nesta pontuação e fica até o fim.
+  HARD_AT: { moving: 16, jelly: 26, current: 36, net: 46, breath: 56 },
+  CURRENT_PUSH: 150,           // quanto a correnteza empurra (px/s)
+  NET_GAP: 200, NET_OPEN: 0.7, // rede: passagem larga, só rasga com o baiacu quase todo inflado
+  BREATH_TIME: 3.5,            // segundos de ar com o baiacu inflado
+  BREATH_REFILL: 2.5,          // segundos para encher o fôlego de novo
+  BREATH_OUT: 1.6,             // segundos murcho à força quando o ar acaba
+  BREATH_USE: 0.55, BREATH_FORCED: 0.1, // acima desta abertura gasta ar / abertura máxima sem ar
+  BANNER: 3.2,                 // segundos do aviso de perigo novo
 };
 const MP_VERSION = '0.10.14';
 const MP_BASE = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VERSION}`;
@@ -40,6 +49,7 @@ const C = {
   handY: '#7fd6ff',                                       // modo difícil: a mão da altura
   ink: '#0a2a40', paper: '#fff7e3', pearl: '#fff3d6', outline: 'rgba(10,42,64,.4)',
   coin: '#f5c542', coinDark: '#b8860b',
+  jelly: '#e2b8ff', jellyDark: '#9a6cc9', net: '#f6e7bf', danger: '#ff7a6b',
 };
 
 /* Zonas do cenário, em ciclo a cada CFG.ZONE_SCORE pontos. Só mudam o visual.
@@ -291,19 +301,40 @@ function drawCam() {
 /* ============================================================
    Estado do jogo
    ============================================================ */
-const fish = { x: 260, y: CFG.H / 2, vy: 0, r: 30 };
+const fish = { x: 260, y: CFG.H / 2, vy: 0, r: 30, o: 0.5 };   // o: abertura que vale (o fôlego pode limitar)
 const game = {
   state: 'start',      // start | tutorial | countdown | playing | paused | over
   t: 0, dist: 0, score: 0, lives: CFG.LIVES, passed: 0,
   inv: 0, shake: 0, count: 0, nextCol: 0, lastGapY: CFG.H / 2,
   cols: [], pearls: [], puffs: [], pauseReason: null, pearlCoins: 0,
+  // Modo difícil: relógio da partida (para de contar na pausa), perigos liberados e o que eles criam.
+  clock: 0, stages: new Set(), banner: null, jellies: [], currents: [], breath: 1, breathless: 0,
 };
 const level = () => clamp(game.score / CFG.LEVEL_SCORE, 0, 1);
 const speed = () => lerp(CFG.SPEED[0], CFG.SPEED[1], level());
 
+/* Perigos do modo difícil, na ordem em que aparecem (pontuação em CFG.HARD_AT). */
+const HARD_STAGES = [
+  { id: 'moving', title: 'Corais que se mexem', sub: 'Algumas passagens sobem e descem.' },
+  { id: 'jelly', title: 'Águas-vivas!', sub: 'Não encoste nelas.' },
+  { id: 'current', title: 'Correntezas', sub: 'As setas mostram para onde o mar empurra.' },
+  { id: 'net', title: 'Redes de pesca', sub: 'Infle bem o baiacu para rasgar a rede.' },
+  { id: 'breath', title: 'Fôlego', sub: 'Ficar inflado gasta ar. Sem ar, ele murcha sozinho.' },
+];
+const perigo = (id) => hardOn() && game.stages.has(id);
+function checkStages() {
+  if (!hardOn()) return;
+  for (const s of HARD_STAGES) {
+    if (game.score < CFG.HARD_AT[s.id] || game.stages.has(s.id)) continue;
+    game.stages.add(s.id);
+    game.banner = { title: s.title, sub: s.sub, t: CFG.BANNER };
+  }
+}
+
 function resetRun() {
   Object.assign(game, { dist: 0, score: 0, lives: CFG.LIVES, passed: 0, inv: 0, shake: 0, pearlCoins: 0,
-    cols: [], pearls: [], puffs: [], lastGapY: CFG.H / 2 });
+    cols: [], pearls: [], puffs: [], lastGapY: CFG.H / 2,
+    clock: 0, stages: new Set(), banner: null, jellies: [], currents: [], breath: 1, breathless: 0 });
   game.nextCol = W + 120;
   fish.y = CFG.H / 2; fish.vy = 0;
 }
@@ -311,22 +342,51 @@ function resetRun() {
 function spawnCol(x) {
   const lv = level();
   const narrow = game.cols.length + game.passed >= 4 && Math.random() < 0.14 + 0.24 * lv;
-  const gapH = narrow ? CFG.GAP_NARROW : lerp(CFG.GAP[0], CFG.GAP[1], lv);
-  const lo = 64 + gapH / 2, hi = CFG.FLOOR - 44 - gapH / 2;
+  const net = !narrow && perigo('net') && Math.random() < 0.25 + 0.15 * lv;
+  let gapH = narrow ? CFG.GAP_NARROW : lerp(CFG.GAP[0], CFG.GAP[1], lv);
+  if (net) gapH = Math.max(gapH, CFG.NET_GAP);
+  // Coral que se mexe: a passagem oscila em torno do centro sorteado, sem sair da tela.
+  const amp = !net && perigo('moving') && Math.random() < 0.55 ? rand(28, 40 + 40 * lv) * (narrow ? 0.6 : 1) : 0;
+  const lo = 64 + gapH / 2 + amp, hi = CFG.FLOOR - 44 - gapH / 2 - amp;
   let cy = clamp(rand(lo, hi), game.lastGapY - 170, game.lastGapY + 170);
   cy = clamp(cy, lo, hi);
   game.lastGapY = cy;
   const w = narrow ? CFG.COL_W_NARROW : CFG.COL_W;
-  game.cols.push({ x, w, cy, gapH, narrow, done: false, hit: false, seed: Math.random() * 1000 });
+  game.cols.push({ x, w, cy, base: cy, amp, wob: rand(0.7, 1.3), ph: rand(0, 6.28), gapH, narrow, net,
+    broken: false, done: false, hit: false, seed: Math.random() * 1000 });
   const spacing = lerp(CFG.SPACING[0], CFG.SPACING[1], lv);
-  if (Math.random() < 0.65) {
-    game.pearls.push({ x: x + w / 2 + spacing / 2, y: rand(90, CFG.FLOOR - 70), r: 11, ph: rand(0, 6.28) });
+  const mid = x + w / 2 + spacing / 2;
+  if (perigo('jelly') && Math.random() < 0.3 + 0.25 * lv) {      // água-viva no lugar da pérola
+    const base = rand(120, CFG.FLOOR - 120);
+    game.jellies.push({ x: mid, y: base, base, amp: rand(40, 90), ph: rand(0, 6.28), r: 17, hit: false });
+  } else if (Math.random() < 0.65) {
+    game.pearls.push({ x: mid, y: rand(90, CFG.FLOOR - 70), r: 11, ph: rand(0, 6.28) });
+  }
+  if (perigo('current') && Math.random() < 0.3 && !game.currents.some((k) => k.x + k.w > x - 100)) {
+    game.currents.push({ x: x + w + 40, w: spacing * 1.5, dir: Math.random() < 0.5 ? -1 : 1 });
   }
   return spacing;
 }
 
+// Empurrão vertical das correntezas onde o baiacu está, suavizado nas bordas de cada uma.
+function currentPush() {
+  let p = 0;
+  for (const k of game.currents) {
+    p += k.dir * CFG.CURRENT_PUSH * clamp(Math.min(fish.x - k.x, k.x + k.w - fish.x) / 60, 0, 1);
+  }
+  return p;
+}
+
 function stepFish(dt) {
-  const o = input.open;
+  let o = input.open;
+  if (perigo('breath') && game.state === 'playing') {   // fôlego: inflado gasta ar; sem ar, murcha à força
+    if (game.breathless > 0) { game.breathless -= dt; o = Math.min(o, CFG.BREATH_FORCED); }
+    if (game.breathless <= 0 && o > CFG.BREATH_USE) {
+      game.breath -= dt / CFG.BREATH_TIME;
+      if (game.breath <= 0) { game.breath = 0; game.breathless = CFG.BREATH_OUT; puff(fish.x, fish.y, 10, C.paper); }
+    } else game.breath = Math.min(1, game.breath + dt / CFG.BREATH_REFILL);
+  }
+  fish.o = o;
   fish.r = lerp(CFG.R_MIN, CFG.R_MAX, o);
   const top = 26 + fish.r * 0.5, bot = CFG.FLOOR - fish.r * 0.8;
   let vyTarget;
@@ -338,7 +398,7 @@ function stepFish(dt) {
     vyTarget = -d * CFG.V_MAX;                         // aberta sobe, fechada desce
   }
   fish.vy += (vyTarget - fish.vy) * Math.min(1, CFG.V_RESP * dt);
-  fish.y += fish.vy * dt;
+  fish.y += (fish.vy + currentPush()) * dt;
   if (fish.y < top) { fish.y = top; fish.vy = Math.max(0, fish.vy); }
   if (fish.y > bot) { fish.y = bot; fish.vy = Math.min(0, fish.vy); }
 }
@@ -358,24 +418,38 @@ function puff(x, y, n, color) {
 function stepWorld(dt) {
   const v = speed();
   game.dist += v * dt;
-  for (const c of game.cols) c.x -= v * dt;
+  game.clock += dt;
+  for (const c of game.cols) {
+    c.x -= v * dt;
+    if (c.amp) c.cy = c.base + Math.sin(game.clock * c.wob + c.ph) * c.amp;
+  }
   for (const p of game.pearls) p.x -= v * dt;
+  for (const j of game.jellies) { j.x -= v * dt; j.y = j.base + Math.sin(game.clock * 1.2 + j.ph) * j.amp; }
+  for (const k of game.currents) k.x -= v * dt;
   game.nextCol -= v * dt;
   if (game.nextCol <= W + 120) game.nextCol += spawnCol(game.nextCol);
   game.cols = game.cols.filter((c) => c.x + c.w > -80);
   game.pearls = game.pearls.filter((p) => p.x > -40 && !p.got);
+  game.jellies = game.jellies.filter((j) => j.x > -40);
+  game.currents = game.currents.filter((k) => k.x + k.w > -20);
   if (game.inv > 0) game.inv -= dt;
+  if (game.banner) game.banner.t -= dt;
 
   const cr = fish.r * CFG.HIT;
   for (const c of game.cols) {
     const topH = c.cy - c.gapH / 2, botY = c.cy + c.gapH / 2;
+    // Rede: no meio da passagem. Rasga com o baiacu inflado; murcho, ele se enrosca e perde vida.
+    if (c.net && !c.broken && circleRect(fish.x, fish.y, cr, c.x + c.w / 2 - 4, topH, 8, c.gapH)) {
+      c.broken = true;
+      puff(c.x + c.w / 2, fish.y, 16, C.net);
+      if (fish.o >= CFG.NET_OPEN) { game.score += 2; som.tocar('fenda'); }
+      else if (game.inv <= 0) { c.hit = true; if (hurt()) return; }
+    }
     if (game.inv <= 0 && !c.hit &&
         (circleRect(fish.x, fish.y, cr, c.x, -50, c.w, topH + 50) ||
          circleRect(fish.x, fish.y, cr, c.x, botY, c.w, CFG.H - botY))) {
-      c.hit = true; game.lives -= 1; game.inv = CFG.INV; game.shake = 0.3;
-      puff(fish.x, fish.y, 14, C.paper);
-      som.tocar('batida');
-      if (game.lives <= 0) return gameOver();
+      c.hit = true;
+      if (hurt()) return;
     }
     if (!c.done && c.x + c.w < fish.x - fish.r) {
       c.done = true; game.passed += 1;
@@ -383,6 +457,12 @@ function stepWorld(dt) {
         game.score += c.narrow ? 3 : 1;
         if (c.narrow) som.tocar('fenda');
       }
+    }
+  }
+  for (const j of game.jellies) {   // o centro da batida fica entre o chapéu e o começo dos tentáculos
+    if (!j.hit && game.inv <= 0 && Math.hypot(j.x - fish.x, j.y + j.r * 0.4 - fish.y) < cr + j.r) {
+      j.hit = true;
+      if (hurt()) return;
     }
   }
   for (const p of game.pearls) {
@@ -394,6 +474,16 @@ function stepWorld(dt) {
       som.tocar('perola');
     }
   }
+  checkStages();
+}
+// Batida: perde uma vida e fica piscando. Devolve true se a partida acabou.
+function hurt() {
+  game.lives -= 1; game.inv = CFG.INV; game.shake = 0.3;
+  puff(fish.x, fish.y, 14, C.paper);
+  som.tocar('batida');
+  if (game.lives > 0) return false;
+  gameOver();
+  return true;
 }
 
 function stepPuffs(dt) {
@@ -483,6 +573,7 @@ function showTutStep() {
   $('tutBarWrap').hidden = final; $('tutGo').hidden = !final;
   $('tutSkip').hidden = final;
   $('tutPauseTip').hidden = input.mode !== 'cam';
+  $('tutHardTip').hidden = !hardOn();
   $('tutPauseTip').textContent = hardOn() ? 'Se uma das mãos sair da câmera, o jogo pausa sozinho.'
     : 'Se a mão sair da câmera, o jogo pausa sozinho.';
   if (final) return;
@@ -886,6 +977,78 @@ function drawCols() {
     const col = c.narrow ? P.narrow : P.coral, dark = c.narrow ? P.narrowDark : P.coralDark;
     drawRock(c.x, -30, c.w, topH + 30, true, col, dark, c.seed, c.narrow);
     drawRock(c.x, botY, c.w, CFG.FLOOR - botY + 30, false, col, dark, c.seed + 50, c.narrow);
+    if (c.net && !c.broken) drawNet(c.x + c.w / 2, topH, botY);
+  }
+}
+// Rede de pesca: malha em losangos entre duas cordas, presa nas bordas da passagem.
+function drawNet(x, top, bot) {
+  const hw = 14;
+  ctx.save();
+  ctx.beginPath(); ctx.rect(x - hw, top, hw * 2, bot - top); ctx.clip();
+  ctx.strokeStyle = C.net; ctx.lineWidth = 2; ctx.globalAlpha = 0.85;
+  ctx.beginPath();
+  for (let y = top - hw * 2; y < bot; y += 14) {
+    ctx.moveTo(x - hw, y); ctx.lineTo(x + hw, y + hw * 2);
+    ctx.moveTo(x + hw, y); ctx.lineTo(x - hw, y + hw * 2);
+  }
+  ctx.stroke();
+  ctx.globalAlpha = 1; ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.moveTo(x - hw + 2, top); ctx.lineTo(x - hw + 2, bot); ctx.moveTo(x + hw - 2, top); ctx.lineTo(x + hw - 2, bot);
+  ctx.stroke();
+  ctx.restore();
+}
+function drawJellies(t) {
+  for (const j of game.jellies) {
+    const s = j.r, sq = 1 + Math.sin(t * 3 + j.ph) * 0.1;
+    ctx.globalAlpha = j.hit ? 0.35 : 1;
+    ctx.fillStyle = 'rgba(226,184,255,.22)';
+    ctx.beginPath(); ctx.arc(j.x, j.y + s * 0.4, s * 1.8, 0, 6.283); ctx.fill();
+    ctx.strokeStyle = C.jellyDark; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+    for (let k = -1.5; k <= 1.5; k++) {
+      const x0 = j.x + k * s * 0.42;
+      ctx.beginPath(); ctx.moveTo(x0, j.y);
+      ctx.quadraticCurveTo(x0 + Math.sin(t * 3 + k + j.ph) * 6, j.y + s, x0, j.y + s * 2.1);
+      ctx.stroke();
+    }
+    ctx.fillStyle = C.jelly;
+    ctx.beginPath(); ctx.ellipse(j.x, j.y, s * sq, s / sq, 0, Math.PI, 0); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = C.outline; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,.7)';
+    ctx.beginPath(); ctx.arc(j.x - s * 0.35, j.y - s * 0.45, 3, 0, 6.283); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+// Correntezas: faixa clara com setas correndo para o lado em que empurram.
+function drawCurrents() {
+  for (const k of game.currents) {
+    if (k.x > W || k.x + k.w < 0) continue;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(k.x, 0, k.w, CFG.FLOOR); ctx.clip();
+    ctx.fillStyle = 'rgba(255,255,255,.07)'; ctx.fillRect(k.x, 0, k.w, CFG.FLOOR);
+    ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+    ctx.beginPath();
+    for (let i = 0, x = k.x + 24; x < k.x + k.w; x += 48, i++) {
+      for (let r = 0; r < 4; r++) {
+        const y = wrap(hash(i * 7 + r) * CFG.FLOOR + k.dir * game.clock * 170, CFG.FLOOR);
+        ctx.moveTo(x, y - k.dir * 24); ctx.lineTo(x, y);
+        ctx.moveTo(x - 6, y - k.dir * 7); ctx.lineTo(x, y); ctx.lineTo(x + 6, y - k.dir * 7);
+      }
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+// Barra de fôlego acima do baiacu.
+function drawBreath() {
+  if (!perigo('breath')) return;
+  const w = 46, h = 7, x = fish.x - w / 2, y = Math.max(6, fish.y - fish.r - 20);
+  const out = game.breathless > 0;
+  ctx.fillStyle = 'rgba(6,34,54,.45)'; rr(x - 2, y - 2, w + 4, h + 4, 5); ctx.fill();
+  ctx.fillStyle = out || game.breath < 0.3 ? C.danger : C.paper;
+  if (game.breath > 0.02) { rr(x, y, w * game.breath, h, 3.5); ctx.fill(); }
+  if (out) {
+    ctx.font = '700 13px "Figtree", system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.fillStyle = C.paper; ctx.fillText('sem ar', fish.x, y - 4);
   }
 }
 function drawPearls(t) {
@@ -1010,6 +1173,25 @@ function drawZoneName() {
   ctx.fillStyle = C.ink; ctx.fillText(name, W / 2, y + 21);
   ctx.restore();
 }
+// Aviso de perigo novo no modo difícil, abaixo do nome da zona.
+function drawBanner() {
+  const b = game.banner;
+  if (!b || b.t <= 0) return;
+  const a = clamp(Math.min(b.t, CFG.BANNER - b.t) / 0.3, 0, 1);
+  ctx.save();
+  ctx.globalAlpha = a;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const big = '800 22px "Baloo 2", "Trebuchet MS", system-ui, sans-serif', small = '600 14px "Figtree", system-ui, sans-serif';
+  ctx.font = big; const w1 = ctx.measureText(b.title).width;
+  ctx.font = small; const w2 = ctx.measureText(b.sub).width;
+  const w = Math.min(W - 32, Math.max(w1, w2) + 44), h = 62, y = 122 + (1 - a) * -8;
+  ctx.fillStyle = 'rgba(6,34,54,.3)'; rr(W / 2 - w / 2, y + 4, w, h, 18); ctx.fill();
+  ctx.fillStyle = C.paper; rr(W / 2 - w / 2, y, w, h, 18); ctx.fill();
+  ctx.fillStyle = C.danger; rr(W / 2 - w / 2, y, 8, h, 4); ctx.fill();
+  ctx.fillStyle = C.ink; ctx.font = big; ctx.fillText(b.title, W / 2, y + 23);
+  ctx.globalAlpha = a * 0.75; ctx.font = small; ctx.fillText(b.sub, W / 2, y + 45);
+  ctx.restore();
+}
 
 function render(t) {
   ctx.save();
@@ -1020,7 +1202,9 @@ function render(t) {
     ctx.strokeStyle = 'rgba(255,247,227,.7)'; ctx.lineWidth = 2; ctx.setLineDash([10, 8]);
     ctx.strokeRect(-4, CFG.H / 2 - BAND, W + 8, BAND * 2); ctx.setLineDash([]);
   }
+  drawCurrents();
   drawPearls(t);
+  drawJellies(t);
   drawCols();
   drawFloor();
   const blink = game.inv > 0 && Math.floor(t * 12) % 2 === 0;
@@ -1028,9 +1212,10 @@ function render(t) {
   if (!blink) {
     drawFish(ctx, fish.x, fish.y + (idle ? Math.sin(t * 1.6) * 10 : 0),
       idle ? lerp(CFG.R_MIN, CFG.R_MAX, 0.55 + Math.sin(t * 1.1) * 0.3) : fish.r,
-      idle ? 0.55 + Math.sin(t * 1.1) * 0.3 : input.open, t,
+      idle ? 0.55 + Math.sin(t * 1.1) * 0.3 : fish.o, t,
       clamp(fish.vy / 700, -0.3, 0.3), loja.visual(save.equipped));
   }
+  if (!idle && game.state !== 'tutorial') drawBreath();
   for (const p of game.puffs) {
     ctx.globalAlpha = clamp(p.life * 2, 0, 1); ctx.fillStyle = p.color;
     ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 6.283); ctx.fill();
@@ -1039,7 +1224,7 @@ function render(t) {
   ctx.restore();
 
   if (game.state !== 'start' && game.state !== 'tutorial' && game.state !== 'shop') drawHud();
-  if (game.state === 'playing' || game.state === 'countdown') drawZoneName();
+  if (game.state === 'playing' || game.state === 'countdown') { drawZoneName(); drawBanner(); }
   if (game.state === 'countdown') {
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.font = '800 150px "Baloo 2", "Trebuchet MS", system-ui, sans-serif';
@@ -1064,7 +1249,7 @@ function frame(now) {
     case 'tutorial': updateTutorial(dt); break;
     case 'countdown': {
       if (camLost) { pause('hand'); break; }
-      fish.r = lerp(CFG.R_MIN, CFG.R_MAX, input.open);
+      fish.o = input.open; fish.r = lerp(CFG.R_MIN, CFG.R_MAX, fish.o);
       const shown = Math.ceil(game.count);
       game.count -= dt;
       if (game.count <= 0) setState('playing');
@@ -1080,7 +1265,7 @@ function frame(now) {
       if (game.pauseReason === 'hand' && input.mode === 'cam' && input.seen > CFG.HAND_BACK) beginCountdown();
       break;
   }
-  som.tom(input.open, game.state === 'playing');
+  som.tom(fish.o, game.state === 'playing');
   if (game.state !== 'paused') updateZone(dt);
   stepPuffs(dt);
   render(game.t);
